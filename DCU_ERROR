@@ -34,7 +34,7 @@ def load_json(filename):
         return f"Error loading {filename}: {e}"
 
 def translate_value(value, description_true, description_false):
-    """Convert boolean values to human-readable descriptions."""
+    """Convert boolean values to readable descriptions."""
     return description_true if value else description_false
 
 def get_sensor_data(sensor_number):
