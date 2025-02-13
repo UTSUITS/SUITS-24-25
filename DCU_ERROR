@@ -1,3 +1,8 @@
+# Had to create a project folder with mkdir and I used the nano editor to save the python script
+# json files had to be in same project folder as script
+# Can be executed with python3 (name).py
+
+
 import json
 
 # File paths
