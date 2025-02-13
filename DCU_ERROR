@@ -1,0 +1,78 @@
+import json
+
+# File paths
+DCU_FILE = "DCU.json"
+ERROR_FILE = "ERROR.json"
+
+# Mapping numbers to specific sensors in DCU and ERROR with descriptions
+SENSOR_MAPPING = {
+    2: (DCU_FILE, ["dcu", "eva1", "batt"], "Suit running on battery power", "Running on umbilical power"),
+    3: (DCU_FILE, ["dcu", "eva1", "oxy"], "Using primary oxygen tank", "Using secondary oxygen tank"),
+    4: (DCU_FILE, ["dcu", "eva1", "comm"], "Connected to Channel A", "Connected to Channel B"),
+    5: (DCU_FILE, ["dcu", "eva1", "fan"], "Using primary fan", "Using secondary fan"),
+    6: (DCU_FILE, ["dcu", "eva1", "pump"], "Coolant pump is open", "Coolant pump is closed"),
+    7: (DCU_FILE, ["dcu", "eva1", "co2"], "Scrubber A is filling with CO2", "Scrubber B is filling with CO2"),
+
+    8: (DCU_FILE, ["dcu", "eva2", "batt"], "Suit running on battery power", "Running on umbilical power"),
+    9: (DCU_FILE, ["dcu", "eva2", "oxy"], "Using primary oxygen tank", "Using secondary oxygen tank"),
+    10: (DCU_FILE, ["dcu", "eva2", "comm"], "Connected to Channel A", "Connected to Channel B"),
+    11: (DCU_FILE, ["dcu", "eva2", "fan"], "Using primary fan", "Using secondary fan"),
+    12: (DCU_FILE, ["dcu", "eva2", "pump"], "Coolant pump is open", "Coolant pump is closed"),
+    13: (DCU_FILE, ["dcu", "eva2", "co2"], "Scrubber A is filling with CO2", "Scrubber B is filling with CO2"),
+
+    14: (ERROR_FILE, ["error", "fan_error"], "Fan system failure detected", "Fan system operational"),
+    15: (ERROR_FILE, ["error", "oxy_error"], "Oxygen system failure detected", "Oxygen system operational"),
+    16: (ERROR_FILE, ["error", "pump_error"], "Pump system failure detected", "Pump system operational")
+}
+
+def load_json(filename):
+    """Load JSON data from a file."""
+    try:
+        with open(filename, "r") as file:
+            return json.load(file)
+    except Exception as e:
+        return f"Error loading {filename}: {e}"
+
+def translate_value(value, description_true, description_false):
+    """Convert boolean values to human-readable descriptions."""
+    return description_true if value else description_false
+
+def get_sensor_data(sensor_number):
+    """Retrieve a specific sensor value based on the input number."""
+    if sensor_number not in SENSOR_MAPPING:
+        return "Invalid input. Please enter a valid sensor number."
+
+    filename, keys, description_true, description_false = SENSOR_MAPPING[sensor_number]
+    data = load_json(filename)
+
+    if isinstance(data, str):  # Error handling
+        return data
+
+    # Navigate JSON hierarchy
+    try:
+        for key in keys:
+            data = data[key]
+
+        return f"{keys[-1].capitalize()}: {translate_value(data, description_true, description_false)}"
+    
+    except KeyError:
+        return f"Error: Missing expected keys in {filename}."
+
+# Continuous Input Loop
+if __name__ == "__main__":
+    print("Sensor Number Mapping:")
+    print("2-7: EVA1 DCU | 8-13: EVA2 DCU | 14-16: ERROR States")
+    
+    while True:
+        user_input = input("Enter a sensor number (or type 'exit' to quit): ").strip()
+
+        if user_input.lower() == "exit":
+            print("Exiting telemetry system.")
+            break  # Ends the loop
+
+        if not user_input.isdigit():
+            print("Invalid input. Please enter a number.")
+            continue  # Restart the loop if input is not a number
+
+        sensor_number = int(user_input)
+        print(get_sensor_data(sensor_number))  # Display result
