@@ -1,0 +1,67 @@
+import json
+
+def get_imu_data(input_number):
+    with open(r"C:\Users\jerem\OneDrive\Desktop\NASA SUITS SCRIPTS\IMUtest.json", "r") as file:
+        data = json.load(file)
+    
+    if input_number in [17, 18, 19]:
+        key = "eva1"
+    elif input_number in [20, 21, 22]:
+        key = "eva2"
+    else:
+        return "Invalid input. Please enter a number between 17-22."
+    
+    mapping = {17: "posx", 18: "posy", 19: "heading", 20: "posx", 21: "posy", 22: "heading"}
+    attribute = mapping[input_number]
+    
+    return data['imu'][key][attribute]
+
+def get_uia_data(input_number):
+    with open(r"C:\Users\jerem\OneDrive\Desktop\NASA SUITS SCRIPTS\UIAtest.json", "r") as file:
+        data = json.load(file)
+    
+    mapping = {
+        48: "eva1_power", 49: "eva1_oxy", 50: "eva1_water_supply", 51: "eva1_water_waste",
+        52: "eva2_power", 53: "eva2_oxy", 54: "eva2_water_supply", 55: "eva2_water_waste",
+        56: "oxy_vent", 57: "depress"
+    }
+    
+    if input_number not in mapping:
+        return "Invalid input. Please enter a number between 48-57."
+    
+    attribute = mapping[input_number]
+    return data['uia'][attribute]
+
+def get_spec_data(input_number):
+    with open(r"C:\Users\jerem\OneDrive\Desktop\NASA SUITS SCRIPTS\SPECtest.json", "r") as file:
+        data = json.load(file)
+    
+    if input_number in range(26, 37):
+        key = "eva1"
+    elif input_number in range(37, 48):
+        key = "eva2"
+    else:
+        return "Invalid input. Please enter a number between 26-47."
+    
+    mapping = {
+        26: "id",27: "SiO2", 28: "TiO2", 29: "Al2O3", 30: "FeO", 31: "MnO",
+        32: "MgO", 33: "CaO", 34: "K2O", 35: "P2O3", 36: "other",
+        37: "id", 38: "SiO2", 39: "TiO2", 40: "Al2O3", 41: "FeO",
+        42: "MnO", 43: "MgO", 44: "CaO", 45: "K2O", 46: "P2O3",
+        47: "other"
+    }
+    
+    attribute = mapping[input_number]
+    return data['spec'][key]['data'][attribute] if attribute != "id" else data['spec'][key][attribute]
+
+# Example usage
+if __name__ == "__main__":
+    input_number = int(input("Enter a number (17-22 for IMU, 26-47 for SPEC, 48-57 for UIA): "))
+    if 17 <= input_number <= 22:
+        print(get_imu_data(input_number))
+    elif 26 <= input_number <= 47:
+        print(get_spec_data(input_number))
+    elif 48 <= input_number <= 57:
+        print(get_uia_data(input_number))
+    else:
+        print("Invalid input range.")
