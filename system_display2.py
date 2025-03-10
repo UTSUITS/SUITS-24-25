@@ -1,94 +1,177 @@
+import sys
 import socket
+import struct
+import json
 import time
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QPushButton, QTextEdit
+from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
+
+# Load server data from JSON file
+with open(r"C:\Users\jerem\SUITS-24-25\server_info.json", 'r') as f:
+    server_config = json.load(f)
+
+def is_big_endian():
+    return struct.pack("H", 1) == b"\x00\x01"
+
+def to_big_endian(value):
+    return struct.pack(">I", value) if not is_big_endian() else struct.pack("I", value)
+
+def send_udp_request(server_ip, server_port, request_time, command):
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    request_packet = to_big_endian(request_time) + to_big_endian(command)
+    udp_socket.sendto(request_packet, (server_ip, server_port))
+    return udp_socket
+
+def receive_response(udp_socket):
+    response, server_address = udp_socket.recvfrom(1024)
+    server_time, command = struct.unpack("II", response[:8])
+    output_data = response[8:]
+    decoded_data = int.from_bytes(output_data, byteorder='big')
+    return server_time, command, decoded_data, server_address
 
 class ServerRequestThread(QThread):
-    response_received = pyqtSignal(str, str, str, str)  # Signal includes timestamp
+    response_received = pyqtSignal(str, int)
 
-    def __init__(self, command, server_ip, server_port):
+    def __init__(self, server_ip, server_port, command, display):
         super().__init__()
-        self.command = command
-        self.server_ip = server_ip
+        self.server_ip = server_ip.strip()
         self.server_port = server_port
+        self.command = command
+        self.display = display
         self._running = True
+        self.request_time = int(time.time())
 
     def run(self):
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                # Send UDP packet
-                timestamp = self.get_current_time()  # Get the timestamp when the request is sent
-                print(f"{timestamp} - Sent request for command {self.command} to {self.server_ip}:{self.server_port}")  # Log the timestamp and request in terminal
-                s.sendto(self.command.encode(), (self.server_ip, self.server_port))
-                
-                # Receive response
-                response, _ = s.recvfrom(1024)  # buffer size is 1024 bytes
-                
-                # Try decoding the response with UTF-8, fallback if necessary
-                try:
-                    response = response.decode("utf-8").strip()
-                except UnicodeDecodeError:
-                    response = f"Invalid UTF-8 data received: {response.hex()}"
-                
-                if self._running:
-                    # Extract the "Output" value after the word "Output:"
-                    if "Output:" in response:
-                        output_value = response.split("Output:")[-1].strip()  # Extract after "Output:"
-                        self.response_received.emit(output_value, self.command, response, timestamp)
-                    else:
-                        self.response_received.emit("Disconnected", self.command, "No output received", timestamp)
+            udp_socket = send_udp_request(self.server_ip, self.server_port, self.request_time, self.command)
+            server_time, command_received, decoded_data, server_address = receive_response(udp_socket)
+            response = f"Receiving from {server_address}\nCommand: {self.command}\nOutput: {decoded_data}"
+            self.response_received.emit(response, decoded_data)
+            udp_socket.close()
         except Exception as e:
-            print(f"Error connecting to server: {e}")
-            if self._running:
-                self.response_received.emit("Disconnected", self.command, str(e), self.get_current_time())
+            self.response_received.emit(str(e), -1)
 
-    def stop(self):
-        self._running = False
-        self.wait()  # Wait for the thread to finish
+    def update_request_time(self):
+        # Update the request time for periodic refresh
+        self.request_time = int(time.time())
+        self.start()  # Start the thread to send a new request with updated time
 
-    def get_current_time(self):
-        return time.strftime("%H:%M:%S")
-
-# Example usage in PyQt5 application
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
-
-class MainWindow(QMainWindow):
-    def __init__(self):
+class SystemWarningDisplay(QWidget):
+    def __init__(self, server_ip, server_port):
         super().__init__()
-        self.setWindowTitle("Server Request Client")
-        self.setGeometry(100, 100, 600, 400)
-        
-        # Setup a label to display responses
-        self.label = QLabel(self)
-        self.label.setGeometry(10, 10, 580, 380)
-        
-        # Example command, IP, and Port
-        self.command = "some_command"
-        self.server_ip = "10.8.17.189"
-        self.server_port = 14141
-        
-        # Setup thread to communicate with server
-        self.request_thread = ServerRequestThread(self.command, self.server_ip, self.server_port)
-        self.request_thread.response_received.connect(self.update_label)
-        
-        # Start the thread
-        self.request_thread.start()
-        
-        # Timer to stop after 10 seconds (for example)
+        self.server_ip = server_ip
+        self.server_port = server_port
+
+        self.setWindowTitle("Wrist-Mounted System Display")
+        self.setGeometry(100, 100, 400, 500)
+        self.setStyleSheet("background-color: black;")
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+
+        title = QLabel("⚠️ ERROR TRACKING ⚠️")
+        title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("color: white; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        self.chat_box = QTextEdit()
+        self.chat_box.setFixedHeight(200)
+        self.chat_box.setReadOnly(True)
+        self.chat_box.setStyleSheet("background-color: rgba(0, 0, 0, 0.8); color: white; border-radius: 10px; padding: 10px; border: 2px solid #333;")
+        layout.addWidget(self.chat_box)
+
+        # Add buttons for commands
+        self.button_14 = QPushButton("Fan Error (14)")
+        self.button_15 = QPushButton("02 (15)")
+        self.button_16 = QPushButton("Pump Error (16)")
+
+        # Set initial button styles
+        self.setup_button(self.button_14, "green")
+        self.setup_button(self.button_15, "green")
+        self.setup_button(self.button_16, "green")
+
+        # Connect buttons to respective commands
+        self.button_14.clicked.connect(lambda: self.send_command(14))
+        self.button_15.clicked.connect(lambda: self.send_command(15))
+        self.button_16.clicked.connect(lambda: self.send_command(16))
+
+        layout.addWidget(self.button_14)
+        layout.addWidget(self.button_15)
+        layout.addWidget(self.button_16)
+
+        self.setLayout(layout)
+
+        # Create threads for each command
+        self.server_thread_14 = ServerRequestThread(self.server_ip, self.server_port, 14, self)
+        self.server_thread_15 = ServerRequestThread(self.server_ip, self.server_port, 15, self)
+        self.server_thread_16 = ServerRequestThread(self.server_ip, self.server_port, 16, self)
+
+        # Connect signals for each thread to update button status
+        self.server_thread_14.response_received.connect(self.update_button_status_14)
+        self.server_thread_15.response_received.connect(self.update_button_status_15)
+        self.server_thread_16.response_received.connect(self.update_button_status_16)
+
+        # Start the threads for each command
+        self.server_thread_14.start()
+        self.server_thread_15.start()
+        self.server_thread_16.start()
+
+        # Set up a timer to refresh data every second
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.stop_thread)
-        self.timer.start(10000)  # Stop after 10 seconds
+        self.timer.timeout.connect(self.refresh_data)
+        self.timer.start(1)  # Refresh every 1000ms (1 second)
 
-    def update_label(self, output, command, response, timestamp):
-        # Update the label with the latest response
-        self.label.setText(f"Timestamp: {timestamp}\nCommand: {command}\nResponse: {response}\nOutput: {output}")
-        
-    def stop_thread(self):
-        self.request_thread.stop()
+    def setup_button(self, button, color):
+        button.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        button.setFixedHeight(40)
+        button.setStyleSheet(f"background-color: {color}; color: white;")
 
-# Main application loop
+    def update_button_status_14(self, response, decoded_data):
+        self.chat_box.append(response)
+        self.update_button_status(self.button_14, decoded_data)
+
+    def update_button_status_15(self, response, decoded_data):
+        self.chat_box.append(response)
+        self.update_button_status(self.button_15, decoded_data)
+
+    def update_button_status_16(self, response, decoded_data):
+        self.chat_box.append(response)
+        self.update_button_status(self.button_16, decoded_data)
+
+    def update_button_status(self, button, decoded_data):
+        if decoded_data == 1:
+            button.setStyleSheet("background-color: red; color: white;")
+        else:
+            button.setStyleSheet("background-color: green; color: white;")
+
+    def send_command(self, command):
+        if command == 14:
+            self.server_thread_14 = ServerRequestThread(self.server_ip, self.server_port, 14, self)
+            self.server_thread_14.start()
+        elif command == 15:
+            self.server_thread_15 = ServerRequestThread(self.server_ip, self.server_port, 15, self)
+            self.server_thread_15.start()
+        elif command == 16:
+            self.server_thread_16 = ServerRequestThread(self.server_ip, self.server_port, 16, self)
+            self.server_thread_16.start()
+
+    def refresh_data(self):
+        # Update the request time every second for each thread
+        self.server_thread_14.update_request_time()
+        self.server_thread_15.update_request_time()
+        self.server_thread_16.update_request_time()
+
+    def closeEvent(self, event):
+        self.server_thread_14.quit()
+        self.server_thread_15.quit()
+        self.server_thread_16.quit()
+        event.accept()
+
 if __name__ == "__main__":
-    app = QApplication([])
-    window = MainWindow()
-    window.show()
-    app.exec_()
+    app = QApplication(sys.argv)
+    server_ip = server_config["SERVER_IP"]
+    server_port = int(server_config["SERVER_PORT"])
+    display = SystemWarningDisplay(server_ip, server_port)
+    display.show()
+    sys.exit(app.exec())
