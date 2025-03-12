@@ -53,9 +53,8 @@ class ServerRequestThread(QThread):
             self.response_received.emit(str(e), -1)
 
     def update_request_time(self):
-        # Update the request time for periodic refresh
         self.request_time = int(time.time())
-        self.start()  # Start the thread to send a new request with updated time
+        self.start()
 
 class SystemWarningDisplay(QWidget):
     def __init__(self, server_ip, server_port):
@@ -63,42 +62,45 @@ class SystemWarningDisplay(QWidget):
         self.server_ip = server_ip
         self.server_port = server_port
 
+        # Initialize error states to track changes
+        self.error_state_14 = None
+        self.error_state_15 = None
+        self.error_state_16 = None
+
+        # Set fixed window size to match the 1024x600 touchscreen
         self.setWindowTitle("Wrist-Mounted System Display")
-        self.setGeometry(100, 100, 400, 500)
+        self.setGeometry(100, 100, 1024, 600)
+        self.setFixedSize(1024, 600)
         self.setStyleSheet("background-color: black;")
         layout = QVBoxLayout()
-        layout.setSpacing(15)
+        layout.setSpacing(10)
 
         title = QLabel("⚠️ ERROR TRACKING ⚠️")
-        title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        title.setFont(QFont("Arial", 24, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color: white; margin-bottom: 10px;")
         layout.addWidget(title)
 
+        # Buttons for commands
+        self.button_14 = QPushButton("Fan Error")
+        self.button_15 = QPushButton("Oxygen Error")
+        self.button_16 = QPushButton("Pump Error")
+
+        # Chatbox placed at the bottom
         self.chat_box = QTextEdit()
-        self.chat_box.setFixedHeight(200)
+        self.chat_box.setFixedHeight(250)  # Adjusted to fit within 1024x600 screen
         self.chat_box.setReadOnly(True)
         self.chat_box.setStyleSheet("background-color: rgba(0, 0, 0, 0.8); color: white; border-radius: 10px; padding: 10px; border: 2px solid #333;")
-        layout.addWidget(self.chat_box)
 
-        # Add buttons for commands
-        self.button_14 = QPushButton("Fan Error (14)")
-        self.button_15 = QPushButton("02 (15)")
-        self.button_16 = QPushButton("Pump Error (16)")
-
-        # Set initial button styles
+        # Buttons on top of the chatbox
         self.setup_button(self.button_14, "green")
         self.setup_button(self.button_15, "green")
         self.setup_button(self.button_16, "green")
 
-        # Connect buttons to respective commands
-        self.button_14.clicked.connect(lambda: self.send_command(14))
-        self.button_15.clicked.connect(lambda: self.send_command(15))
-        self.button_16.clicked.connect(lambda: self.send_command(16))
-
         layout.addWidget(self.button_14)
         layout.addWidget(self.button_15)
         layout.addWidget(self.button_16)
+        layout.addWidget(self.chat_box)  # Chatbox is now below the buttons
 
         self.setLayout(layout)
 
@@ -120,30 +122,48 @@ class SystemWarningDisplay(QWidget):
         # Set up a timer to refresh data every second
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_data)
-        self.timer.start(1)  # Refresh every 1000ms (1 second)
+        self.timer.start(1)  # Refresh every 1 second
 
     def setup_button(self, button, color):
-        button.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        button.setFixedHeight(40)
-        button.setStyleSheet(f"background-color: {color}; color: white;")
+        button.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        button.setFixedHeight(60)  # Adjusted for better touch interaction
+        button.setStyleSheet(f"background-color: {color}; color: white; border-radius: 10px; padding: 10px;")
 
     def update_button_status_14(self, response, decoded_data):
-        self.chat_box.append(response)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(self.server_thread_14.request_time))
+        if decoded_data == 1 and self.error_state_14 != 1:
+            self.chat_box.append(f"[{timestamp}] Fan Error Detected!")
+            self.error_state_14 = 1
+        elif decoded_data == 0 and self.error_state_14 != 0:
+            self.chat_box.append(f"[{timestamp}] Fan Error Cleared!")
+            self.error_state_14 = 0
         self.update_button_status(self.button_14, decoded_data)
 
     def update_button_status_15(self, response, decoded_data):
-        self.chat_box.append(response)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(self.server_thread_15.request_time))
+        if decoded_data == 1 and self.error_state_15 != 1:
+            self.chat_box.append(f"[{timestamp}] Oxygen Error Detected!")
+            self.error_state_15 = 1
+        elif decoded_data == 0 and self.error_state_15 != 0:
+            self.chat_box.append(f"[{timestamp}] Oxygen Error Cleared!")
+            self.error_state_15 = 0
         self.update_button_status(self.button_15, decoded_data)
 
     def update_button_status_16(self, response, decoded_data):
-        self.chat_box.append(response)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(self.server_thread_16.request_time))
+        if decoded_data == 1 and self.error_state_16 != 1:
+            self.chat_box.append(f"[{timestamp}] Pump Error Detected!")
+            self.error_state_16 = 1
+        elif decoded_data == 0 and self.error_state_16 != 0:
+            self.chat_box.append(f"[{timestamp}] Pump Error Cleared!")
+            self.error_state_16 = 0
         self.update_button_status(self.button_16, decoded_data)
 
     def update_button_status(self, button, decoded_data):
         if decoded_data == 1:
-            button.setStyleSheet("background-color: red; color: white;")
+            button.setStyleSheet("background-color: red; color: white; border-radius: 10px; padding: 10px;")
         else:
-            button.setStyleSheet("background-color: green; color: white;")
+            button.setStyleSheet("background-color: green; color: white; border-radius: 10px; padding: 10px;")
 
     def send_command(self, command):
         if command == 14:
@@ -157,7 +177,6 @@ class SystemWarningDisplay(QWidget):
             self.server_thread_16.start()
 
     def refresh_data(self):
-        # Update the request time every second for each thread
         self.server_thread_14.update_request_time()
         self.server_thread_15.update_request_time()
         self.server_thread_16.update_request_time()
@@ -167,6 +186,7 @@ class SystemWarningDisplay(QWidget):
         self.server_thread_15.quit()
         self.server_thread_16.quit()
         event.accept()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
