@@ -3,6 +3,7 @@ import socket
 import struct
 import time
 import argparse 
+import json 
 
 start_time = time.perf_counter()
 
@@ -14,11 +15,14 @@ parser.add_argument("--port", type=str, required=True, help="server's port numbe
 args = parser.parse_args()
 
 # Create a UDP socket and send the request
-def send_udp_request(server_ip, server_port, request_time, command):
+def send_udp_request(server_ip, server_port, request_time, command, team_num):
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
-    # Build request packet (time, command)
-    request_packet = struct.pack("!II",request_time,command) # two unsigned ints each 4 bytes long packed in big-endian format
+    if team_num is None: 
+        # Build request packet (time, command)
+        request_packet = struct.pack("!II",request_time,int(command)) # two unsigned ints each 4 bytes long packed in big-endian format
+    else:
+        request_packet = struct.pack("!IIf",request_time,command,float(team_num)) # two unsigned int and a 4 byte floating-point number 
 
     # Send UDP request
     udp_socket.sendto(request_packet, (server_ip, server_port))
@@ -27,44 +31,71 @@ def send_udp_request(server_ip, server_port, request_time, command):
 
 # Receive and process the response from the server
 def receive_raw_response(udp_socket):
-    response, server_address = udp_socket.recvfrom(1024)  # Buffer size 1024 bytes
-    
+    response, server_address = udp_socket.recvfrom(1024)  # Buffer size 1024 bytes 
+
     # Extract response data
     server_time, command = struct.unpack("II", response[:8])
 
     # Decode data (you can customize this as needed)
     output_data = response[8:]
-    decoded_data = int.from_bytes(output_data, byteorder='big')  # 'big' or 'little' depending on endianness
-    
-    return server_time, command, decoded_data, server_address
+
+    return server_time, command, output_data, server_address
 
 # Main function to drive the script
 def main():
 
-    for command in range(1,119): # iterates from 1-118 to send to server
-        # REQUEST_TIME = current time
+    team_num = 0
+
+    float_outputs = set(range(17, 23)) | set(range(27, 37)) | set(range(38, 48)) | set(range(58,103)) | {106,109,112,115,118}
+
+    results = {} 
+
+    for command in range(1,119): # iterates from 1-118 to send to server 
         request_time = int(time.time())
-
-        # Send UDP request
-        udp_socket = send_udp_request(args.ip, int(args.port), request_time, command)
-
-        # Receive and process the server's response
-        server_time, command_received, decoded_data, server_address = receive_raw_response(udp_socket)
+        if command >= 58: 
+            # Send UDP request
+            udp_socket = send_udp_request(args.ip, int(args.port), request_time, command,team_num)
+            # Receive and process the server's response
+            server_time, command_received, output_data, server_address = receive_raw_response(udp_socket) 
+            if command in float_outputs: 
+                decoded_data = struct.unpack(">f", output_data)  # Big-endian float
+                decoded_data = decoded_data[0] 
+            else: 
+                # decoded_data = struct.unpack(">I", output_data)  # Big-endian float
+                decoded_data = struct.unpack(">I", output_data)[0] & 0xFF
+            # decoded_data is a tuple so just extract first entry 
+        else: 
+            udp_socket = send_udp_request(args.ip, int(args.port), request_time, command,None) 
+            # Receive and process the server's response
+            server_time, command_received, output_data, server_address = receive_raw_response(udp_socket) 
+            if command in float_outputs:
+                decoded_data = struct.unpack(">f", output_data) # Unsigned int 
+                decoded_data = decoded_data[0] 
+            else: 
+                # decoded_data = struct.unpack(">I", output_data) # Unsigned int
+                decoded_data = struct.unpack(">I", output_data)[0] & 0xFF
 
         # write to json file/ write to persistent database / write to data variable in script 
+        results[command] = decoded_data 
 
         # Display the response data
-        print(f"Receiving from {server_address}")
-        print(f"Server Time: {server_time}") 
-        print(f"Command Sent: {command}")
-        print(f"Command Received: {command_received}") 
-        print(f"Output: {decoded_data}") 
+        # print(f"Command Sent: {command}") 
+        # print(f"Output: {decoded_data}")
+
+    # Write results to JSON file
+    with open("output_results.json", "w") as json_file:
+        json.dump(results, json_file, indent=4) 
+    
+    print('Output data written to output_results.json')
 
     # Close the socket
     udp_socket.close()
 
 if __name__ == "__main__":
-    main()
+    while True:
+        main()
+        time.sleep(1)
+    # main() 
 
 # checks time the script took to execute 
 end_time = time.perf_counter()
