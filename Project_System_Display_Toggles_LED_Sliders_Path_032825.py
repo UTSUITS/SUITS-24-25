@@ -9,8 +9,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush
 from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtWidgets import QSlider
+from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 
-json_path = r"C:\\output_results.json"  ## Add full Path to JSON File
+json_path = r"C:\\output_results.json"   		## Need to full path for both files
+image_path = r"C:\\rockYardMap-min.png"
 
 
 class ToggleSwitch(QPushButton):
@@ -321,7 +323,7 @@ class MainWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Wrist-Mounted System Display")
         self.setGeometry(100, 100, 1024, 600)
-        self.setFixedSize(1024, 600)
+        self.setFixedSize(1100, 600)
         self.setStyleSheet("background-color: black;")
 
         self.layout = QVBoxLayout(self)
@@ -376,6 +378,10 @@ class MainWindow(QWidget):
         eva_states_tab = self.create_eva_states_tab()
         self.tabs.addTab(eva_states_tab, "EVA States")
         self.tab_labels.append("EVA States")
+
+        rock_yard_map_tab = self.create_rock_yard_map_tab()
+        self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
+        self.tab_labels.append("Rock Yard Map")
 
         self.layout.addWidget(self.tabs)
 
@@ -605,6 +611,24 @@ class MainWindow(QWidget):
                 color = QColor("white")
 
             tab_bar.setTabTextColor(i, color)
+
+    def create_rock_yard_map_tab(self):
+        container = QWidget()
+        layout = QVBoxLayout()
+        container.setLayout(layout)
+
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pixmap = QPixmap(image_path)
+
+        if not pixmap.isNull():
+            image_label.setPixmap(pixmap.scaled(900, 550, Qt.AspectRatioMode.KeepAspectRatio))
+        else:
+            image_label.setText("⚠️ Rock Yard Map failed to load.")
+            print(f"[WARNING] Failed to load rock yard map: {image_path}")
+
+        layout.addWidget(image_label)
+        return container
 
 
 if __name__ == "__main__":
