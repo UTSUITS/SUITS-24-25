@@ -11,8 +11,8 @@ from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 
-json_path = r"C:\\output_results.json"   		## Need to full path for both files
-image_path = r"C:\\rockYardMap-min.png"
+json_path = r"/home/utsuits/SUITS-24-25/output_results.json"   		## Need to full path for both files
+image_path = r"/home/utsuits/SUITS-24-25/rockYardMap-min.png"
 
 
 class ToggleSwitch(QPushButton):
