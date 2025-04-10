@@ -322,8 +322,6 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wrist-Mounted System Display")
-        self.setGeometry(100, 100, 1024, 600)
-        self.setFixedSize(1024, 600)
         self.setStyleSheet("background-color: black;")
         self.showFullScreen()
 
