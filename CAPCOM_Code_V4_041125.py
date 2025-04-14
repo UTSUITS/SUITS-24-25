@@ -20,9 +20,9 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 
 from threading import Thread, Lock
 
-#json_path = r"C:\\Users\\NJ_Kid\\PycharmProjects\\Jan25Prob3\\.venv\\output_results.json"
-image_path = r"C:\\Users\\NJ_Kid\\PycharmProjects\\Jan25Prob3\\.venv\\rockYardMap-min.png"
-Telemetry_path = r"C:\\Users\\NJ_Kid\\PycharmProjects\\Jan25Prob3\\.venv\\EVA_Telemetry_Commands_Capacity_Ranges.json"
+#json_path = r"C:\\output_results.json"  # Change path 
+image_path = r"C:\\rockYardMap-min.png"
+Telemetry_path = r"C:\\EVA_Telemetry_Commands_Capacity_Ranges.json"
 
 try:
     with open(Telemetry_path, 'r') as f:
