@@ -5,14 +5,8 @@ import time
 import argparse 
 import json 
 
-start_time = time.perf_counter()
-
-# defining ip and port numbers as arguments 
-parser = argparse.ArgumentParser(description="Write JSON data to a file.") 
-parser.add_argument("--ip", type=str, required=True, help="server's ip address.") 
-parser.add_argument("--port", type=str, required=True, help="server's port number.") 
-# parsing arguments defined above 
-args = parser.parse_args()
+with open('/home/utsuits/ip_address.txt', 'r') as file:
+	ip_address = file.read().strip()
 
 # Create a UDP socket and send the request
 def send_udp_request(server_ip, server_port, request_time, command, team_num):
@@ -54,7 +48,7 @@ def main():
         request_time = int(time.time())
         if command >= 58: 
             # Send UDP request
-            udp_socket = send_udp_request(args.ip, int(args.port), request_time, command,team_num)
+            udp_socket = send_udp_request(ip_address, 14141, request_time, command,team_num)
             # Receive and process the server's response
             server_time, command_received, output_data, server_address = receive_raw_response(udp_socket) 
             if command in float_outputs: 
@@ -65,7 +59,7 @@ def main():
                 decoded_data = struct.unpack(">I", output_data)[0] & 0xFF
             # decoded_data is a tuple so just extract first entry 
         else: 
-            udp_socket = send_udp_request(args.ip, int(args.port), request_time, command,None) 
+            udp_socket = send_udp_request(ip_address, 14141, request_time, command,None) 
             # Receive and process the server's response
             server_time, command_received, output_data, server_address = receive_raw_response(udp_socket) 
             if command in float_outputs:
@@ -78,15 +72,11 @@ def main():
         # write to json file/ write to persistent database / write to data variable in script 
         results[command] = decoded_data 
 
-        # Display the response data
-        # print(f"Command Sent: {command}") 
-        # print(f"Output: {decoded_data}")
-
     # Write results to JSON file
     with open("output_results.json", "w") as json_file:
         json.dump(results, json_file, indent=4) 
     
-    print('Output data written to output_results.json')
+    print('Output data written to output_results.json') 
 
     # Close the socket
     udp_socket.close()
@@ -97,7 +87,3 @@ if __name__ == "__main__":
         time.sleep(1)
     # main() 
 
-# checks time the script took to execute 
-end_time = time.perf_counter()
-elapsed_time = end_time - start_time
-print(f"Execution Time: {elapsed_time:.6f} seconds")

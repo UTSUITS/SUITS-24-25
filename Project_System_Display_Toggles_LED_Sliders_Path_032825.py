@@ -6,13 +6,13 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit,
     QHBoxLayout, QPushButton, QTabWidget, QFrame, QGraphicsDropShadowEffect
 )
-from PyQt6.QtGui import QFont, QColor, QPainter, QBrush
+from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QScreen
 from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 
-json_path = r"/home/utsuits/SUITS-24-25/output_results.json"   		## Need to full path for both files
-image_path = r"/home/utsuits/SUITS-24-25/rockYardMap-min.png"
+json_path = r"/home/utsuits/Documents/SUITS-24-25/output_results.json"   		## Need to full path for both files
+image_path = r"/home/utsuits/Documents/SUITS-24-25/rockYardMap-min.png"
 
 
 class ToggleSwitch(QPushButton):
@@ -323,7 +323,6 @@ class MainWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Wrist-Mounted System Display")
         self.setStyleSheet("background-color: black;")
-        self.showFullScreen()
 
         self.layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
@@ -633,5 +632,7 @@ class MainWindow(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
-    window.show()
+    window.showFullScreen()
+    window.setMinimumSize(800, 600)
+    window.setMaximumSize(1920, 1080) 
     sys.exit(app.exec())
