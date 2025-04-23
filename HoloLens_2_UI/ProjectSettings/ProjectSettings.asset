@@ -686,11 +686,11 @@ PlayerSettings:
   m_MobileRenderingPath: 1
   metroPackageName: HoloLens2UI
   metroPackageVersion: 1.0.0.0
-  metroCertificatePath: 
+  metroCertificatePath: Assets/WSATestCertificate.pfx
   metroCertificatePassword: 
-  metroCertificateSubject: 
-  metroCertificateIssuer: 
-  metroCertificateNotAfter: 0000000000000000
+  metroCertificateSubject: DefaultCompany
+  metroCertificateIssuer: DefaultCompany
+  metroCertificateNotAfter: 000593e2e2d2dc01
   metroApplicationDescription: HoloLens 2 UI
   wsaImages: {}
   metroTileShortName: HoloLens 2 UI
