@@ -1,6 +1,8 @@
 import sys
 import json
 import time
+import math
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QSizePolicy,
     QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit,
@@ -11,8 +13,9 @@ from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 
-json_path = r"/home/utsuits/SUITS-24-25/output_results.json"   		## Need to full path for both files
-image_path = r"/home/utsuits/SUITS-24-25/rockYardMap-min.png"
+base_path = Path(__file__).parent
+json_path = base_path / "output_results.json"
+image_path = base_path / "mapgridattempt.png"
 
 
 class ToggleSwitch(QPushButton):
@@ -318,9 +321,166 @@ class GradientSlider(QSlider):
         self.setEnabled(False)
 
 
+class MapLabel(QLabel):
+    def __init__(self, pixmap, parent=None):
+        super().__init__(parent)
+        self.measuring_distance = False
+        self.measure_points = []
+        self.base_pixmap = pixmap
+        self.points_of_interest_display = []
+        self.click_points = []
+        self.setMouseTracking(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lat_bottom = self.dms_to_decimal(29, 33, 51)
+        self.lat_top = self.dms_to_decimal(29, 33, 56)
+        self.lon_left = -self.dms_to_decimal(95, 4, 56)
+        self.lon_right = -self.dms_to_decimal(95, 4, 50)
+
+
+    def toggle_measure_mode(self, state):
+        self.measuring_distance = state
+        self.measure_points.clear()
+        self.update()
+
+    def save_clicks_to_file(self, path="click_log.json"):
+        try:
+            log_data = []
+            for x, y in self.click_points:
+                lat = self.lat_bottom + (self.lat_top - self.lat_bottom) * ((self.base_pixmap.height() - y) / self.base_pixmap.height())
+                lon = self.lon_left + (self.lon_right - self.lon_left) * (x / self.base_pixmap.width())
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                log_data.append({
+                    "latitude": round(lat, 6),
+                    "longitude": round(lon, 6),
+                    "timestamp": timestamp
+                })
+            with open(path, 'w') as f:
+                json.dump(log_data, f, indent=4)
+            print(f"[SAVED] {len(log_data)} GPS points with timestamps to {path}")
+        except Exception as e:
+            print(f"[ERROR] Could not save clicks: {e}")
+
+
+    def dms_to_decimal(self, deg, minutes, seconds):
+        return deg + minutes / 60 + seconds / 3600
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            label_w, label_h = self.width(), self.height()
+            img_w, img_h = self.base_pixmap.width(), self.base_pixmap.height()
+
+            scaled = self.base_pixmap.scaled(
+                label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            drawn_w, drawn_h = scaled.width(), scaled.height()
+            offset_x = (label_w - drawn_w) // 2
+            offset_y = (label_h - drawn_h) // 2
+
+            x = event.position().x() - offset_x
+            y = event.position().y() - offset_y
+
+            if 0 <= x <= drawn_w and 0 <= y <= drawn_h:
+                orig_x = x * img_w / drawn_w
+                orig_y = y * img_h / drawn_h
+
+                if self.measuring_distance:
+                    self.measure_points.append((orig_x, orig_y))
+                    if len(self.measure_points) == 2:
+                        x1, y1 = self.measure_points[0]
+                        x2, y2 = self.measure_points[1]
+                        feet_x_per_px = 530 / 964
+                        feet_y_per_px = 505 / 923
+                        dx_ft = (x2 - x1) * feet_x_per_px
+                        dy_ft = (y2 - y1) * feet_y_per_px
+                        dist_ft = math.hypot(dx_ft, dy_ft)
+                        print(f"[MEASURE] Distance: {dist_ft:.2f} feet ≈ {dist_ft * 0.3048:.2f} meters")
+                    self.update()
+                    return
+
+
+                orig_x = x * img_w / drawn_w
+                orig_y = y * img_h / drawn_h
+
+                # Bottom-left origin interpolation
+                lat_bottom = self.dms_to_decimal(29, 33, 51)
+                lat_top = self.dms_to_decimal(29, 33, 56)
+                lon_left = -self.dms_to_decimal(95, 4, 56)
+                lon_right = -self.dms_to_decimal(95, 4, 50)
+
+                # Flip Y to start from bottom
+                lat = lat_bottom + (lat_top - lat_bottom) * ((img_h - orig_y) / img_h)
+                lon = lon_left + (lon_right - lon_left) * (orig_x / img_w)
+
+                print(f"[CLICKED] Pixel: ({int(orig_x)}, {int(orig_y)}) → Lat/Lon: ({lat:.6f}, {lon:.6f})")
+
+                self.click_points.append((orig_x, orig_y))
+                self.save_clicks_to_file()
+                self.update()
+
+    def clear_clicks(self):
+        self.click_points = []
+        self.update()
+
+    def show_point_by_index(self, index):
+        if 0 <= index < len(self.points_of_interest_display):
+            self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        label_w, label_h = self.width(), self.height()
+        img_w, img_h = self.base_pixmap.width(), self.base_pixmap.height()
+        scaled = self.base_pixmap.scaled(
+            label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        drawn_w, drawn_h = scaled.width(), scaled.height()
+        offset_x = (label_w - drawn_w) // 2
+        offset_y = (label_h - drawn_h) // 2
+
+        painter.drawPixmap(offset_x, offset_y, scaled)
+        if len(self.measure_points) == 2:
+            x1, y1 = self.measure_points[0]
+            x2, y2 = self.measure_points[1]
+            sx1 = round(x1 * drawn_w / img_w) + offset_x
+            sy1 = round(y1 * drawn_h / img_h) + offset_y
+            sx2 = round(x2 * drawn_w / img_w) + offset_x
+            sy2 = round(y2 * drawn_h / img_h) + offset_y
+            painter.setPen(QColor("cyan"))
+            painter.drawLine(sx1, sy1, sx2, sy2)
+
+
+        # Draw task point (red)
+        if self.points_of_interest_display:
+            x, y = self.points_of_interest_display[0]
+            scaled_x = round(x * drawn_w / img_w) + offset_x
+            scaled_y = round(y * drawn_h / img_h) + offset_y
+            painter.setPen(Qt.GlobalColor.red)
+            painter.setBrush(Qt.GlobalColor.red)
+            painter.drawEllipse(scaled_x - 5, scaled_y - 5, 10, 10)
+
+        # Draw click points (yellow)
+        painter.setPen(QColor("yellow"))
+        painter.setBrush(QColor("yellow"))
+        for x, y in self.click_points:
+            scaled_x = round(x * drawn_w / img_w) + offset_x
+            scaled_y = round(y * drawn_h / img_h) + offset_y
+            painter.drawEllipse(scaled_x - 4, scaled_y - 4, 8, 8)
+
+        painter.end()
+
+
+
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.image_width = 3907
+        self.image_height = 2578
+
         self.setWindowTitle("Wrist-Mounted System Display")
         self.setGeometry(100, 100, 1024, 600)
         self.setFixedSize(1024, 600)
@@ -389,6 +549,24 @@ class MainWindow(QWidget):
         self.blink_timer = QTimer(self)
         self.blink_timer.timeout.connect(self.update_blinking_tabs)
         self.blink_timer.start(500)
+   
+    def grid_to_pixel(self, col, row):
+        left_padding = 243
+        right_padding = 272
+        top_padding = 180
+        bottom_padding = 151
+
+        usable_width = self.image_width - left_padding - right_padding  # 3392
+        usable_height = self.image_height - top_padding - bottom_padding  # 2247
+
+        cell_w = usable_width / 22
+        cell_h = usable_height / 14
+
+        x = left_padding + col * cell_w + cell_w / 2
+        y = top_padding + row * cell_h + cell_h / 2
+
+        return int(x), int(y)
+
 
     def create_eva_telemetry_tab(self):
         container = QWidget()
@@ -615,20 +793,39 @@ class MainWindow(QWidget):
 
     def create_rock_yard_map_tab(self):
         container = QWidget()
-        layout = QVBoxLayout()
-        container.setLayout(layout)
+        layout = QVBoxLayout(container)
 
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pixmap = QPixmap(image_path)
-
-        if not pixmap.isNull():
-            image_label.setPixmap(pixmap.scaled(900, 550, Qt.AspectRatioMode.KeepAspectRatio))
+        pixmap = QPixmap(str(image_path))
+        if pixmap.isNull():
+            print("[ERROR] Image failed to load")
         else:
-            image_label.setText("⚠️ Rock Yard Map failed to load.")
-            print(f"[WARNING] Failed to load rock yard map: {image_path}")
+            print(f"[INFO] Loaded image: {pixmap.width()} x {pixmap.height()}")
 
-        layout.addWidget(image_label)
+        self.image_label = MapLabel(pixmap)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        measure_toggle = QPushButton("Measure Distance")
+        measure_toggle.setCheckable(True)
+        measure_toggle.setStyleSheet("font-size: 16px; background-color: navy; color: white; border-radius: 8px; padding: 8px;")
+        measure_toggle.clicked.connect(lambda: self.image_label.toggle_measure_mode(measure_toggle.isChecked()))
+        layout.addWidget(measure_toggle)
+
+
+        layout.addWidget(self.image_label)
+        # Clear Clicks Button
+        clear_button = QPushButton("Clear")
+        clear_button.setStyleSheet("font-size: 16px; background-color: red; color: white; border-radius: 8px; padding: 8px;")
+
+        def clear_clicks():
+            self.image_label.clear_clicks()
+            print("[INFO] Click points cleared")
+
+        clear_button.clicked.connect(clear_clicks)
+        layout.addWidget(clear_button)
+
+
+        container.setLayout(layout)
         return container
 
 
