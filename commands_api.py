@@ -15,6 +15,9 @@ from flask import Flask, jsonify
 # # parsing arguments defined above 
 # args = parser.parse_args()
 
+with open('/home/utsuits/ip_address.txt', 'r') as file:
+	ip_address = file.read().strip()
+
 # rd=redis.Redis(host='redis-db', port=6379,db=0)
 rd=redis.Redis(host='localhost', port=6379,db=0)
 
@@ -61,7 +64,7 @@ def collect_data():
         for command in range(1,119): # iterates from 1-118 to send to server 
             if command >= 58: 
                 # Send UDP request
-                udp_socket = send_udp_request('172.18.0.1', 14141, request_time, command,team_num)
+                udp_socket = send_udp_request(ip_address, 14141, request_time, command,team_num)
                 # Receive and process the server's response
                 server_time, command_received, output_data, server_address = receive_raw_response(udp_socket) 
                 if command in float_outputs: 
@@ -69,7 +72,7 @@ def collect_data():
                 else: 
                     decoded_data = struct.unpack(">I", output_data)[0] & 0xFF # decoded_data is a tuple so just extract first entry 
             else: 
-                udp_socket = send_udp_request('172.18.0.1', 14141, request_time, command,None) 
+                udp_socket = send_udp_request(ip_address, 14141, request_time, command,None) 
                 # Receive and process the server's response
                 server_time, command_received, output_data, server_address = receive_raw_response(udp_socket) 
                 if command in float_outputs:

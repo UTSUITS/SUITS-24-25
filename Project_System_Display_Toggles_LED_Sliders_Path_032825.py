@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QTextEdit,
     QHBoxLayout, QPushButton, QTabWidget, QFrame, QGraphicsDropShadowEffect
 )
-from PyQt6.QtGui import QFont, QColor, QPainter, QBrush
+from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QScreen
 from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
@@ -482,10 +482,7 @@ class MainWindow(QWidget):
         self.image_height = 2578
 
         self.setWindowTitle("Wrist-Mounted System Display")
-        self.setGeometry(100, 100, 1024, 600)
-        self.setFixedSize(1024, 600)
         self.setStyleSheet("background-color: black;")
-        self.showFullScreen()
 
         self.layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
@@ -832,5 +829,7 @@ class MainWindow(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
-    window.show()
+    window.showFullScreen()
+    window.setMinimumSize(800, 600)
+    window.setMaximumSize(1920, 1080) 
     sys.exit(app.exec())
