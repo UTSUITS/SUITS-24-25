@@ -5,8 +5,8 @@ import time
 import redis 
 import threading
 import json 
-from multiprocessing import Process 
-from flask import Flask 
+from flask import Flask, request
+import logging 
 
 with open('/home/utsuits/ip_address.txt', 'r') as file:
     lines = file.readlines()
@@ -119,6 +119,49 @@ def get_now():
         "waited_seconds": wait_time,
         "data": json.loads(data)
     } 
+
+@app.route('/logs/<int:epochs>', methods=['GET'])
+def get_logs(epochs): 
+    # /logs/<int:epochs>?command=int 
+    command = request.args.get('command', None) # default is all of them 
+    # Validate the command parameter if it was provided
+    if command is not None:
+        try: 
+            command = int(command) 
+            if not 1 <= command <= 118:
+                return "Command must be between 1 and 118\n", 400
+        except ValueError: 
+            logging.error("Invalid command parameter; command must be an integer \n")
+            return "Invalid command parameter; command must be an integer \n", 400
+    
+    results = []
+    current_time = int(time.time())  # current epoch timestamp (rounded to second) 
+    # time.sleep(1) # sleeps a second to get current log 
+    stop_time = current_time - epochs 
+    keys = rd.keys() 
+
+    # filtering the list to get elements in date range
+    keys = [k for k in keys if stop_time <= int(k) <= current_time] 
+
+    for item in keys: 
+        data = rd.get(item)  # Redis keys are strings 
+        parsed_data = json.loads(data)
+        formatted_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(item))) 
+        # If command is provided, only add matching entries
+        if command is None or str(command) in parsed_data:
+            if command is not None:
+                filtered_data = {str(command): parsed_data[str(command)]}
+            else:
+                filtered_data = parsed_data
+
+            results.append({
+                "epoch": formatted_time,
+                "data": filtered_data
+            })
+
+    sorted_data = sorted(results, key=lambda item: item['epoch']) # list of dictionaries 
+    
+    return sorted_data
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0',port=5000) 
