@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # sudo tailscale up 
@@ -90,13 +89,31 @@ done
 echo "Redis is up!"
 
 
-# Flask-Redis tmux session 
-echo "Flask and Redis session starting!"
-tmux new-session -d -s api "cd /home/utsuits/Documents/SUITS-24-25/api && python commands_api.py" 
+# Function to restart a tmux session
+restart_tmux_session() {
+    session_name=$1
+    command=$2
+
+    if tmux has-session -t "$session_name" 2>/dev/null; then
+        echo "Killing existing tmux session: $session_name"
+        tmux kill-session -t "$session_name"
+    fi
+
+    echo "Starting tmux session: $session_name"
+    tmux new-session -d -s "$session_name" "$command"
+}
+
+# Flask-Redis session
+restart_tmux_session "api" "cd /home/utsuits/Documents/SUITS-24-25/api && python commands_api.py"
 echo "Flask and Redis are up and running!"
 
-# WMD tmux session 
-echo "Launching WMD"
-tmux new-session -d -s WMD "export DISPLAY=:0 && export QT_QPA_PLATFORM=xcb && export XAUTHORITY=/home/utsuits/.Xauthority && cd /home/utsuits/Documents/SUITS-24-25/WMD && python display.py"
-echo "WMD successfully launched."
-echo "And we got liftoff!"
+# WMD session
+restart_tmux_session "WMD" "export DISPLAY=:0 && export QT_QPA_PLATFORM=xcb && export XAUTHORITY=/home/utsuits/.Xauthority && cd /home/utsuits/Documents/SUITS-24-25/WMD && python display.py"
+
+echo "T-minus 3"
+sleep 1
+echo "2"
+sleep 1
+echo "1"
+sleep 1
+echo "Lift-off!"
