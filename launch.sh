@@ -1,7 +1,7 @@
 
 #!/bin/bash
 
-sudo tailscale up 
+# sudo tailscale up 
 
 export DISPLAY=:0
 export QT_QPA_PLATFORM=xcb 
