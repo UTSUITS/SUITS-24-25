@@ -8,8 +8,9 @@ public class SliderUpdater : MonoBehaviour
     public Slider targetSlider;
     public Image fill;
     public Gradient gradient;
-    
-    
+    private float targetValue;
+    public float lerpSpeed = 5f;
+
     [HideInInspector] public MaxMinVals valueData;
     [HideInInspector] public string valueKey;
 
@@ -52,6 +53,20 @@ public class SliderUpdater : MonoBehaviour
             fill.color = gradient.Evaluate(percentDiff);
         }
 
+    }
+    public void SetSliderValue(float newValue)
+    {
+        targetValue = Mathf.Clamp(newValue, targetSlider.minValue, targetSlider.maxValue);
+        UpdateFillColor(targetSlider.value);
+    }
+
+    void Update()
+    {
+        if (targetSlider != null)
+        {
+            targetSlider.value = Mathf.Lerp(targetSlider.value, targetValue, Time.deltaTime * lerpSpeed);
+            UpdateFillColor(targetSlider.value);
+        }
     }
 
 }
