@@ -25,23 +25,6 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
-import ast
-import os
-
-def load_simulation_pairs(path="/home/utsuits/Documents/SUITS-24-25/WMD/simulate_position.py"):
-    """Parses simulate_position.py and pulls out the top-level `pairs` list."""
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"{path} not found")
-    source = open(path, 'r').read()
-    tree   = ast.parse(source, path)
-    for node in tree.body:
-        if isinstance(node, ast.Assign) \
-        and getattr(node.targets[0], 'id', None) == "pairs":
-            return ast.literal_eval(node.value)
-    raise ValueError("Could not find `pairs = [...]` in simulate_position.py")
-
-simulation_pairs = load_simulation_pairs()
-
 
 from threading import Thread, Lock
 
@@ -987,7 +970,7 @@ class MainWindow(QWidget):
                           (43, "MgO"), (44, "CaO"), (45, "K2O"), (46, "P2O3"), (47, "Other")]),
            ("UIA", [(48, "EVA1 Power"), (49, "EVA1 Oxy"), (50, "EVA1 Water Supply"), (51, "EVA1 Water Waste"),
                     (52, "EVA2 Power"), (53, "EVA2 Oxy"), (54, "EVA2 Water Supply"), (55, "EVA2 Water Waste"),
-                    (56, "Oxy Vent"), (57, "Depress")])
+                    (56, "Oxy Vent"), (57, "Depress Pump")])
        ]
 
        # Loop through all tab definitions and create appropriate tabs
