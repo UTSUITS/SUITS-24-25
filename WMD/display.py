@@ -1049,7 +1049,7 @@ class MainWindow(QWidget):
        self.blink_timer.start(300)
 
     def _advance_simulation(self):
-        data = SystemStatusDisplay.read_json(self)
+        data = SystemStatusDisplay.read_from_redis(self)
 
         def plot(key_x, key_y, trail):
             try:
@@ -1354,7 +1354,7 @@ class MainWindow(QWidget):
         measure_toggle = QPushButton("📏 Measure Distance")
         measure_toggle.setCheckable(True)
         measure_toggle.setStyleSheet("""
-            font-size: 14px;
+            font-size: 16px;
             background-color: navy;
             color: white;
             border-radius: 8px;
@@ -1367,7 +1367,7 @@ class MainWindow(QWidget):
         # Clear clicks button
         clear_button = QPushButton("🗑️ Clear Clicks")
         clear_button.setStyleSheet("""
-            font-size: 14px;
+            font-size: 16px;
             background-color: #800000;
             color: white;
             border-radius: 8px;
@@ -1380,7 +1380,7 @@ class MainWindow(QWidget):
         # Clear trails button
         clear_trails_button = QPushButton("🧹 Clear Trails")
         clear_trails_button.setStyleSheet("""
-            font-size: 14px;
+            font-size: 16px;
             background-color: #804000;
             color: white;
             border-radius: 8px;
@@ -1392,6 +1392,9 @@ class MainWindow(QWidget):
         
         layout.addLayout(button_row)
         layout.addWidget(self.image_label)
+        
+        # Main horizontal layout for left (text) and right (map) sides
+        main_layout = QHBoxLayout()
         
         # Status bar for position info
         status_layout = QHBoxLayout()
@@ -1415,44 +1418,69 @@ class MainWindow(QWidget):
             try:
                 with results_lock:
                     data = shared_results
-                
-                status_html = "<table width='100%'>"
-                
+
+                # Start building the table with font size adjustments and centering
+                status_html = """
+                <table width='100%' style='border-collapse: collapse; table-layout: auto;'>
+                    <tr>
+                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>Position</th>
+                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>X</th>
+                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>Y</th>
+                    </tr>
+                """
+
                 # Rover position
-                if 'rover_posx' in data and 'rover_posy' in data:
-                    rx = data.get('rover_posx', 'N/A')
-                    ry = data.get('rover_posy', 'N/A')
-                    status_html += f"<tr><td><b style='color:red'>ROVER:</b></td><td>X={rx:.1f}</td><td>Y={ry:.1f}</td></tr>"
+                if 23 in data and 24 in data:
+                    rx = data.get(23, 'N/A')
+                    ry = data.get(24, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td style='text-align: center; font-size: 14px;'>{rx:.1f}</td><td style='text-align: center; font-size: 14px;'>{ry:.1f}</td></tr>"
                 else:
-                    status_html += "<tr><td><b style='color:red'>ROVER:</b></td><td colspan='2'>No position data</td></tr>"
-                    
+                    status_html += "<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
                 # EVA1 position
-                if 'imu_eva1_posx' in data and 'imu_eva1_posy' in data:
-                    e1x = data.get('imu_eva1_posx', 'N/A')
-                    e1y = data.get('imu_eva1_posy', 'N/A')
-                    status_html += f"<tr><td><b style='color:green'>EVA1:</b></td><td>X={e1x:.1f}</td><td>Y={e1y:.1f}</td></tr>"
+                if 17 in data and 18 in data:
+                    e1x = data.get(17, 'N/A')
+                    e1y = data.get(18, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td style='text-align: center; font-size: 14px;'>{e1x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e1y:.1f}</td></tr>"
                 else:
-                    status_html += "<tr><td><b style='color:green'>EVA1:</b></td><td colspan='2'>No position data</td></tr>"
-                    
+                    status_html += "<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
                 # EVA2 position
-                if 'imu_eva2_posx' in data and 'imu_eva2_posy' in data:
-                    e2x = data.get('imu_eva2_posx', 'N/A')
-                    e2y = data.get('imu_eva2_posy', 'N/A')
-                    status_html += f"<tr><td><b style='color:blue'>EVA2:</b></td><td>X={e2x:.1f}</td><td>Y={e2y:.1f}</td></tr>"
+                if 20 in data and 21 in data:
+                    e2x = data.get(20, 'N/A')
+                    e2y = data.get(21, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td style='text-align: center; font-size: 14px;'>{e2x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e2y:.1f}</td></tr>"
                 else:
-                    status_html += "<tr><td><b style='color:blue'>EVA2:</b></td><td colspan='2'>No position data</td></tr>"
-                    
+                    status_html += "<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
+                # End the table
                 status_html += "</table>"
+
+                # Update the status box with the new HTML
                 status_box.setHtml(status_html)
                 
+                # Disabling scrollbars in QTextEdit
+                status_box.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+                status_box.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+
             except Exception as e:
                 status_box.setText(f"Error reading position data: {e}")
         
         status_timer.timeout.connect(update_status)
         status_timer.start(1000)  # Update every second
         
+        # Add status box to layout
         status_layout.addWidget(status_box)
-        layout.addLayout(status_layout)
+        main_layout.addLayout(status_layout)
+
+        # Right side: the map
+        map_layout = QVBoxLayout()
+        map_layout.addWidget(self.image_label)
+        main_layout.addLayout(map_layout)
+
+        # Add the main layout to the container
+        layout.addLayout(main_layout)
 
         return container
 

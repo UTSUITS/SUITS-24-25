@@ -1,4 +1,4 @@
-## Code V6, modified 04/22/2025
+## modified 04/25/2025
 
 # Libraries used
 import socket
@@ -6,8 +6,8 @@ import struct
 import time
 import logging
 import redis 
- 
 import sys
+import math
 import json
 import time
 from PyQt6.QtWidgets import (
@@ -16,9 +16,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QPushButton, QTabWidget, QFrame, QGraphicsDropShadowEffect
 
 )
-
 from PyQt6.QtWidgets import QProgressBar
-from PyQt6.QtGui import QFont, QColor, QPainter, QBrush
+from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen
 from PyQt6.QtCore import Qt, QTimer, QSize, QThread, pyqtSignal, QObject
 from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
@@ -26,10 +25,29 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
+import ast
+import os
+
+def load_simulation_pairs(path="/home/utsuits/Documents/SUITS-24-25/WMD/simulate_position.py"):
+    """Parses simulate_position.py and pulls out the top-level `pairs` list."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"{path} not found")
+    source = open(path, 'r').read()
+    tree   = ast.parse(source, path)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) \
+        and getattr(node.targets[0], 'id', None) == "pairs":
+            return ast.literal_eval(node.value)
+    raise ValueError("Could not find `pairs = [...]` in simulate_position.py")
+
+simulation_pairs = load_simulation_pairs()
+
 
 from threading import Thread, Lock
 
+
 rd=redis.Redis(host='localhost', port=6379,db=0)
+
 
 # Load telemetry range data from a JSON file and store in a map
 #json_path = r"C:\\output_results.json"
@@ -170,6 +188,302 @@ class LEDIndicator(QFrame):
             border: 2px solid white;
         """)
 
+class MapLabel(QLabel):
+    def __init__(self, pixmap, parent=None):
+        super().__init__(parent)
+        self.measuring_distance = False
+        self.measure_points = []
+        self.base_pixmap = pixmap
+        self.points_of_interest_display = []
+        self.click_points = []
+        self.setMouseTracking(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lat_bottom = self.dms_to_decimal(29, 33, 51)
+        self.lat_top = self.dms_to_decimal(29, 33, 56)
+        self.lon_left = -self.dms_to_decimal(95, 4, 56)
+        self.lon_right = -self.dms_to_decimal(95, 4, 50)
+        self.trail = []
+        self.rover_trail = []
+        self.eva1_trail = []
+        self.eva2_trail = []
+        
+        # Timer to update position data from Redis
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self.update_position_from_redis)
+        self.update_timer.start(500)  # Update every 500ms
+        
+    def update_position_from_redis(self):
+        """Fetches position data from Redis and updates trails"""
+        try:
+            with results_lock:
+                data = shared_results
+                
+            # Update rover position if available
+            if 'rover_posx' in data and 'rover_posy' in data:
+                try:
+                    mx = float(data['rover_posx'])
+                    my = float(data['rover_posy'])
+                    px, py = self.map_to_pixel(mx, my)
+                    self.rover_trail.append((px, py))
+                    # Limit trail length to prevent performance issues
+                    if len(self.rover_trail) > 100:
+                        self.rover_trail = self.rover_trail[-100:]
+                except (ValueError, TypeError) as e:
+                    pass
+                    
+            # Update EVA1 position if available
+            if 'imu_eva1_posx' in data and 'imu_eva1_posy' in data:
+                try:
+                    mx = float(data['imu_eva1_posx'])
+                    my = float(data['imu_eva1_posy'])
+                    px, py = self.map_to_pixel(mx, my)
+                    self.eva1_trail.append((px, py))
+                    if len(self.eva1_trail) > 100:
+                        self.eva1_trail = self.eva1_trail[-100:]
+                except (ValueError, TypeError) as e:
+                    pass
+                    
+            # Update EVA2 position if available
+            if 'imu_eva2_posx' in data and 'imu_eva2_posy' in data:
+                try:
+                    mx = float(data['imu_eva2_posx'])
+                    my = float(data['imu_eva2_posy'])
+                    px, py = self.map_to_pixel(mx, my)
+                    self.eva2_trail.append((px, py))
+                    if len(self.eva2_trail) > 100:
+                        self.eva2_trail = self.eva2_trail[-100:]
+                except (ValueError, TypeError) as e:
+                    pass
+                
+            self.update()
+        except Exception as e:
+            print(f"[ERROR] Failed to update position from Redis: {e}")
+
+    def toggle_measure_mode(self, state):
+        self.measuring_distance = state
+        self.measure_points.clear()
+        self.update()
+    
+    def pixel_to_map_coordinates(self, px, py):
+        # X runs left→right
+        scale_x   = 210.0 / (3637 - 240)
+        offset_x  = -5760 - scale_x * 240
+        map_x     = scale_x * px + offset_x
+
+        # Y runs top→bottom
+        pixel_y_min, pixel_y_max = 174, 2281
+        map_y_min,   map_y_max   = -9940.0, -10070.0
+
+        scale_y  = (map_y_max - map_y_min) / (pixel_y_max - pixel_y_min)
+        offset_y = map_y_min - scale_y * pixel_y_min
+
+        map_y    = scale_y * py + offset_y
+        return map_x, map_y
+    
+    def map_to_pixel(self, map_x, map_y):
+        scale_x  = 210.0 / (3637 - 240)
+        offset_x = -5760 - scale_x * 240
+
+        pixel_x  = (map_x - offset_x) / scale_x
+
+        pixel_y_min, pixel_y_max = 174, 2281
+        map_y_min,   map_y_max   = -9940.0, -10070.0
+        scale_y   = (map_y_max - map_y_min) / (pixel_y_max - pixel_y_min)
+        offset_y  = map_y_min - scale_y * pixel_y_min
+
+        pixel_y  = (map_y - offset_y) / scale_y
+        return pixel_x, pixel_y
+
+    def save_clicks_to_file(self, path="click_log.json"):
+        try:
+            log_data = []
+            for x, y in self.click_points:
+                grid_x, grid_y = self.pixel_to_map_coordinates(x, y)
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                log_data.append({
+                    "grid_x": round(grid_x, 1),
+                    "grid_y": round(grid_y, 1),
+                    "timestamp": timestamp
+                })
+            with open(path, 'w') as f:
+                json.dump(log_data, f, indent=4)
+            print(f"[SAVED] {len(log_data)} grid points with timestamps to {path}")
+        except Exception as e:
+            print(f"[ERROR] Could not save clicks: {e}")
+
+    def dms_to_decimal(self, deg, minutes, seconds):
+        return deg + minutes / 60 + seconds / 3600
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            label_w, label_h = self.width(), self.height()
+            img_w, img_h = self.base_pixmap.width(), self.base_pixmap.height()
+
+            scaled = self.base_pixmap.scaled(
+                label_w, label_h, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            drawn_w, drawn_h = scaled.width(), scaled.height()
+            offset_x = (label_w - drawn_w) // 2
+            offset_y = (label_h - drawn_h) // 2
+
+            x = event.position().x() - offset_x
+            y = event.position().y() - offset_y
+
+            if 0 <= x <= drawn_w and 0 <= y <= drawn_h:
+                orig_x = x * img_w / drawn_w
+                orig_y = y * img_h / drawn_h
+
+                if self.measuring_distance:
+                    self.measure_points.append((orig_x, orig_y))
+                    if len(self.measure_points) == 2:
+                        x1, y1 = self.measure_points[0]
+                        x2, y2 = self.measure_points[1]
+                        feet_x_per_px = 530 / 964
+                        feet_y_per_px = 505 / 923
+                        dx_ft = (x2 - x1) * feet_x_per_px
+                        dy_ft = (y2 - y1) * feet_y_per_px
+                        dist_ft = math.hypot(dx_ft, dy_ft)
+                        print(f"[MEASURE] Distance: {dist_ft:.2f} feet ≈ {dist_ft * 0.3048:.2f} meters")
+                    self.update()
+                    return
+
+                orig_x = x * img_w / drawn_w
+                orig_y = y * img_h / drawn_h
+
+                map_x, map_y = self.pixel_to_map_coordinates(orig_x, orig_y)
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                print(f"[CLICKED] #{len(self.click_points) + 1} at {timestamp} → Pixel: ({int(orig_x)}, {int(orig_y)}) → Grid: ({map_x:.1f}, {map_y:.1f})")
+
+                self.click_points.append((orig_x, orig_y))
+                self.save_clicks_to_file()
+                self.update()
+
+    def clear_clicks(self):
+        self.click_points = []
+        self.update()
+
+    def clear_trails(self):
+        """Clear all position trails"""
+        self.rover_trail = []
+        self.eva1_trail = []
+        self.eva2_trail = []
+        self.update()
+
+    def show_point_by_index(self, index):
+        if 0 <= index < len(self.points_of_interest_display):
+            self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # draw the base map
+        label_w, label_h = self.width(), self.height()
+        img_w, img_h     = self.base_pixmap.width(), self.base_pixmap.height()
+        scaled = self.base_pixmap.scaled(
+            label_w, label_h,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        drawn_w, drawn_h = scaled.width(), scaled.height()
+        offset_x = (label_w - drawn_w) // 2
+        offset_y = (label_h - drawn_h) // 2
+        painter.drawPixmap(offset_x, offset_y, scaled)
+
+        # Draw rover trail (red)
+        if self.rover_trail:
+            painter.setPen(QPen(Qt.GlobalColor.red, 3))
+            for px, py in self.rover_trail:
+                sx = round(px * drawn_w / img_w) + offset_x
+                sy = round(py * drawn_h / img_h) + offset_y
+                painter.drawPoint(sx, sy)
+            
+            # Draw current position (larger dot)
+            px, py = self.rover_trail[-1]
+            sx = round(px * drawn_w / img_w) + offset_x
+            sy = round(py * drawn_h / img_h) + offset_y
+            painter.setBrush(QBrush(Qt.GlobalColor.red))
+            painter.drawEllipse(sx-5, sy-5, 10, 10)
+            painter.drawText(sx+10, sy, "ROVER")
+
+        # Draw EVA1 trail (green)
+        if self.eva1_trail:
+            painter.setPen(QPen(Qt.GlobalColor.green, 3))
+            for px, py in self.eva1_trail:
+                sx = round(px * drawn_w / img_w) + offset_x
+                sy = round(py * drawn_h / img_h) + offset_y
+                painter.drawPoint(sx, sy)
+            
+            # Draw current position (larger dot)
+            px, py = self.eva1_trail[-1]
+            sx = round(px * drawn_w / img_w) + offset_x
+            sy = round(py * drawn_h / img_h) + offset_y
+            painter.setBrush(QBrush(Qt.GlobalColor.green))
+            painter.drawEllipse(sx-5, sy-5, 10, 10)
+            painter.drawText(sx+10, sy, "EVA1")
+
+        # Draw EVA2 trail (blue)
+        if self.eva2_trail:
+            painter.setPen(QPen(Qt.GlobalColor.blue, 3))
+            for px, py in self.eva2_trail:
+                sx = round(px * drawn_w / img_w) + offset_x
+                sy = round(py * drawn_h / img_h) + offset_y
+                painter.drawPoint(sx, sy)
+            
+            # Draw current position (larger dot)
+            px, py = self.eva2_trail[-1]
+            sx = round(px * drawn_w / img_w) + offset_x
+            sy = round(py * drawn_h / img_h) + offset_y
+            painter.setBrush(QBrush(Qt.GlobalColor.blue))
+            painter.drawEllipse(sx-5, sy-5, 10, 10)
+            painter.drawText(sx+10, sy, "EVA2")
+
+        # Draw distance measurement line
+        if len(self.measure_points) == 2:
+            x1, y1 = self.measure_points[0]
+            x2, y2 = self.measure_points[1]
+            sx1 = round(x1 * drawn_w / img_w) + offset_x
+            sy1 = round(y1 * drawn_h / img_h) + offset_y
+            sx2 = round(x2 * drawn_w / img_w) + offset_x
+            sy2 = round(y2 * drawn_h / img_h) + offset_y
+            painter.setPen(QPen(QColor("cyan"), 2))
+            painter.drawLine(sx1, sy1, sx2, sy2)
+            
+            # Calculate and display distance
+            feet_x_per_px = 530 / 964
+            feet_y_per_px = 505 / 923
+            dx_ft = (x2 - x1) * feet_x_per_px
+            dy_ft = (y2 - y1) * feet_y_per_px
+            dist_ft = math.hypot(dx_ft, dy_ft)
+            dist_m = dist_ft * 0.3048
+            
+            # Show measurement text
+            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            painter.setPen(QPen(QColor("yellow"), 2))
+            painter.drawText((sx1+sx2)//2, (sy1+sy2)//2 - 10, 
+                            f"{dist_ft:.1f} ft / {dist_m:.1f} m")
+
+        # POIs
+        if self.points_of_interest_display:
+            x, y = self.points_of_interest_display[0]
+            sx = round(x * drawn_w / img_w) + offset_x
+            sy = round(y * drawn_h / img_h) + offset_y
+            painter.setPen(Qt.GlobalColor.red)
+            painter.setBrush(Qt.GlobalColor.red)
+            painter.drawEllipse(sx - 5, sy - 5, 10, 10)
+
+        # click log
+        painter.setPen(QColor("yellow"))
+        painter.setBrush(QColor("yellow"))
+        for x, y in self.click_points:
+            sx = round(x * drawn_w / img_w) + offset_x
+            sy = round(y * drawn_h / img_h) + offset_y
+            painter.drawEllipse(sx - 4, sy - 4, 8, 8)
+
+        painter.end()
+
+
 # Display the widgets in the command window
 class SystemStatusDisplay(QWidget):
 
@@ -282,11 +596,11 @@ class SystemStatusDisplay(QWidget):
 
         if self.use_leds:
             if value == 1:
-                widget.set_color("green")
+                widget.set_color("red")
                 self.log_to_chat(f"[{timestamp}] {label} Error Detected!")
              #   self.chat_box.append(f"[{timestamp}] {label} Error Detected!")
             elif value == 0:
-                widget.set_color("red")
+                widget.set_color("green")
                 self.chat_box.append(f"[{timestamp}] {label} :- OK")
             else:
                 widget.set_color("gray")
@@ -642,109 +956,115 @@ class PieChartDisplay(QWidget):
 
 class MainWindow(QWidget):
     def __init__(self):
-        super().__init__()
+       super().__init__()
 
-        # Set window title and fixed size
-        self.setWindowTitle("Wrist-Mounted System Display")
-        self.setGeometry(100, 100, 1024, 600)
-        self.setFixedSize(1100, 600)
-        self.setStyleSheet("background-color: black;")
+       # Set window title and fixed size
+       self.setWindowTitle("Wrist-Mounted System Display")
+       self.setGeometry(100, 100, 1024, 600)
+       self.setFixedSize(1100, 600)
+       self.setStyleSheet("background-color: black;")
 
-        # Main layout and tab widget
-        self.layout = QVBoxLayout(self)
-        self.tabs = QTabWidget()
+       # Main layout and tab widget
+       self.layout = QVBoxLayout(self)
+       self.tabs = QTabWidget()
 
-        # Initialize various instance variables
-        self.tab_labels = []
-        self.blink_state = True
-        self.displays = []
+       # Initialize various instance variables
+       self.tab_labels = []
+       self.blink_state = True
+       self.displays = []
 
-        # Define all tab names and associated telemetry keys
-        tab_definitions = [
-            ("EVA1 DCU", [(2, "Battery"), (3, "Oxygen"), (4, "Comm"), (5, "Fan"), (6, "Pump"), (7, "CO2")]),
-            ("EVA2 DCU", [(8, "Battery"), (9, "Oxygen"), (10, "Comm"), (11, "Fan"), (12, "Pump"), (13, "CO2")]),
-            ("Error Tracking", [(14, "Fan"), (15, "Oxygen"), (16, "Pump")], True),
-            ("EVA1 IMU", [(17, "PosX"), (18, "PosY"), (19, "Heading")]),
-            ("EVA2 IMU", [(20, "PosX"), (21, "PosY"), (22, "Heading")]),
-            ("ROVER", [(20, "PosX"), (21, "PosY"), (22, "QR_ID")]),
-            ("EVA1 SPEC", [(27, "SiO2"), (28, "TiO2"), (29, "Al2O3"), (309, "FeO"), (31, "MnO"),
-                           (32, "MgO"), (33, "CaO"), (34, "K2O"), (35, "P2O3"), (36, "Other")]),
-            ("EVA2 SPEC", [(38, "SiO2"), (39, "TiO2"), (40, "Al2O3"), (41, "FeO"), (42, "MnO"),
-                           (43, "MgO"), (44, "CaO"), (45, "K2O"), (46, "P2O3"), (47, "Other")]),
-            ("UIA", [(48, "EVA1 Power"), (49, "EVA1 Oxy"), (50, "EVA1 Water Supply"), (51, "EVA1 Water Waste"),
-                     (52, "EVA2 Power"), (53, "EVA2 Oxy"), (54, "EVA2 Water Supply"), (55, "EVA2 Water Waste"),
-                     (56, "Oxy Vent"), (57, "Depress")])
-        ]
+       # Define all tab names and associated telemetry keys
+       tab_definitions = [
+           ("EVA1 DCU", [(2, "Battery"), (3, "Oxygen"), (4, "Comm"), (5, "Fan"), (6, "Pump"), (7, "CO2")]),
+           ("EVA2 DCU", [(8, "Battery"), (9, "Oxygen"), (10, "Comm"), (11, "Fan"), (12, "Pump"), (13, "CO2")]),
+           ("Error Tracking", [(14, "Fan"), (15, "Oxygen"), (16, "Pump")], True),
+           ("Rock Yard Map", [(17, "EVA1 PosX"), (18, "EVA1 PosY"), (19, "EVA1 Heading"), 
+                              (20, "EVA2 PosX"), (21, "EVA2 PosY"), (22, "EVA2 Heading"), 
+                              (23, "Rover PosX"), (24, "Rover PosY"), (25, "Rover QR_ID")]),
+           ("EVA1 SPEC", [(27, "SiO2"), (28, "TiO2"), (29, "Al2O3"), (30, "FeO"), (31, "MnO"),
+                          (32, "MgO"), (33, "CaO"), (34, "K2O"), (35, "P2O3"), (36, "Other")]),
+           ("EVA2 SPEC", [(38, "SiO2"), (39, "TiO2"), (40, "Al2O3"), (41, "FeO"), (42, "MnO"),
+                          (43, "MgO"), (44, "CaO"), (45, "K2O"), (46, "P2O3"), (47, "Other")]),
+           ("UIA", [(48, "EVA1 Power"), (49, "EVA1 Oxy"), (50, "EVA1 Water Supply"), (51, "EVA1 Water Waste"),
+                    (52, "EVA2 Power"), (53, "EVA2 Oxy"), (54, "EVA2 Water Supply"), (55, "EVA2 Water Waste"),
+                    (56, "Oxy Vent"), (57, "Depress")])
+       ]
 
-        # Loop through all tab definitions and create appropriate tabs
-        for name, keys, *use_leds in tab_definitions:
-            use_led = use_leds[0] if use_leds else False
+       # Loop through all tab definitions and create appropriate tabs
+       for name, keys, *use_leds in tab_definitions:
+           use_led = use_leds[0] if use_leds else False
 
-            ##Added code - V3 20250409
-            # Lock EVA1 IMU, EVA2 IMU, and ROVER tabs for now
-            if name in ["EVA1 IMU", "EVA2 IMU", "ROVER"]:
-                access_denied = QLabel("🚫 Access Denied")
-                access_denied.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                access_denied.setStyleSheet("color: red; font-size: 28px; font-weight: bold;")
-                self.tabs.addTab(access_denied, name)
-                self.tab_labels.append(name)
-                continue
+           # Make EVA1 SPEC and EVA2 SPEC use DonutChart 
+           if name in ["EVA1 SPEC", "EVA2 SPEC"]:
+               display = PieChartDisplay(f"🧪 {name} 🧪", keys)
+               self.displays.append(display)
+               self.tabs.addTab(display, name)
+               self.tab_labels.append(name)
+               continue
 
-            # Make EVA1 SPEC and EVA2 SPEC use DonutChart - modified 20250414
-            if name in ["EVA1 SPEC", "EVA2 SPEC"]:
-                display = PieChartDisplay(f"🧪 {name} 🧪", keys)
-                self.displays.append(display)
-                self.tabs.addTab(display, name)
-                self.tab_labels.append(name)
-                continue
+           # Map tab names to emoji icons
+           icon_map = {
+               "EVA1 DCU": "🔋",
+               "EVA2 DCU": "🔋",
+               "Rock Yard Map": "🚙",
+               "EVA1 SPEC": "🧪",
+               "EVA2 SPEC": "🧪",
+               "UIA": "🛰️",
+               "Error Tracking": "⚠️"
+           }
+           icon = icon_map.get(name, "🔧")
+        
+           if name != "Rock Yard Map":  # Check if the tab name is not "Rock Yard Map"
+             # Use generic system status display for remaining tabs
+               display = SystemStatusDisplay(f"{icon} {name} {icon}", keys, use_leds=use_led, notify_parent=self)
+               self.displays.append(display)
+               self.tabs.addTab(display, name)
+               self.tab_labels.append(name)
 
-            # Map tab names to emoji icons
-            icon_map = {
-                "EVA1 DCU": "🔋",
-                "EVA2 DCU": "🔋",
-                "EVA1 IMU": "🧭",
-                "EVA2 IMU": "🧭",
-                "ROVER": "🚙",
-                "EVA1 SPEC": "🧪",
-                "EVA2 SPEC": "🧪",
-                "UIA": "🛰️",
-                "Error Tracking": "⚠️"
-            }
-            icon = icon_map.get(name, "🔧")
+       # Add custom telemetry tab for EVA1
+       eva_telemetry_tab = self.create_eva_telemetry_tab()
+       self.tabs.addTab(eva_telemetry_tab, "EVA1 TELEMETRY")
+       self.tab_labels.append("EVA1 TELEMETRY")
 
-            # Use generic system status display for remaining tabs
-            display = SystemStatusDisplay(f"{icon} {name} {icon}", keys, use_leds=use_led, notify_parent=self)
-            self.displays.append(display)
-            self.tabs.addTab(display, name)
-            self.tab_labels.append(name)
+       # Add custom telemetry tab for EVA2
+       eva2_telemetry_tab = self.create_eva2_telemetry_tab()
+       self.tabs.addTab(eva2_telemetry_tab, "EVA2 TELEMETRY")
+       self.tab_labels.append("EVA2 TELEMETRY")
 
-        # Add custom telemetry tab for EVA1
-        eva_telemetry_tab = self.create_eva_telemetry_tab()
-        self.tabs.addTab(eva_telemetry_tab, "EVA1 TELEMETRY")
-        self.tab_labels.append("EVA1 TELEMETRY")
+       # Add EVA state indicator tab
+       eva_states_tab = self.create_eva_states_tab()
+       self.tabs.addTab(eva_states_tab, "EVA States")
+       self.tab_labels.append("EVA States")
 
-        # Add custom telemetry tab for EVA2
-        eva2_telemetry_tab = self.create_eva2_telemetry_tab()
-        self.tabs.addTab(eva2_telemetry_tab, "EVA2 TELEMETRY")
-        self.tab_labels.append("EVA2 TELEMETRY")
+       # Add map display tab
+       rock_yard_map_tab = self.create_rock_yard_map_tab()
+       self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
+       self.tab_labels.append("Rock Yard Map")
 
-        # Add EVA state indicator tab
-        eva_states_tab = self.create_eva_states_tab()
-        self.tabs.addTab(eva_states_tab, "EVA States")
-        self.tab_labels.append("EVA States")
+       self.layout.addWidget(self.tabs)
 
-        # Add map display tab
-        rock_yard_map_tab = self.create_rock_yard_map_tab()
-        self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
-        self.tab_labels.append("Rock Yard Map")
+       # Setup tab blinking for error indicators
+       self.blink_timer = QTimer(self)
+       self.blink_timer.timeout.connect(self.update_blinking_tabs)
+       self.blink_timer.start(300)
 
-        # Finalize layout
-        self.layout.addWidget(self.tabs)
+    def _advance_simulation(self):
+        data = SystemStatusDisplay.read_json(self)
 
-        # Timer to update blinking tab states periodically
-        self.blink_timer = QTimer(self)
-        self.blink_timer.timeout.connect(self.update_blinking_tabs)
-        self.blink_timer.start(300)
+        def plot(key_x, key_y, trail):
+            try:
+                mx = float(data.get(key_x))
+                my = float(data.get(key_y))
+            except (TypeError, ValueError):
+                return
+            px, py = self.image_label.map_to_pixel(mx, my)
+            trail.append((px, py))
+
+        plot('rover_posx',    'rover_posy',    self.image_label.rover_trail)
+        plot('imu_eva1_posx', 'imu_eva1_posy', self.image_label.eva1_trail)
+        plot('imu_eva2_posx', 'imu_eva2_posy', self.image_label.eva2_trail)
+
+        self.image_label.update()
 
     # Container widget for EVA telemetry sub-tabs
     def create_eva_telemetry_tab(self):
@@ -982,35 +1302,137 @@ class MainWindow(QWidget):
                 has_red = tab_widget.has_red()
                 has_red = tab_widget.has_red()
 
-            # If red status detected, alternate tab text color
             if has_red:
                 color = QColor("red") if self.blink_state else QColor("white")
             else:
                 color = QColor("white")
 
-            # Apply the color to the tab label
             tab_bar.setTabTextColor(i, color)
 
-    # Create tab with rock yard image map - no functionality as of yet
+    def _advance_simulation(self):
+        map_x, map_y = simulation_pairs[self.sim_index]
+
+        pixel_x, pixel_y = self.image_label.map_to_pixel(map_x, map_y)
+
+        self.image_label.trail.append((pixel_x, pixel_y))
+        self.image_label.update()
+
+        self.sim_index = (self.sim_index + 1) % len(simulation_pairs)
+
+
     def create_rock_yard_map_tab(self):
         container = QWidget()
-        layout = QVBoxLayout()
-        container.setLayout(layout)
+        layout = QVBoxLayout(container)
 
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Title for the map
+        title_label = QLabel("🗺️ Rock Yard Live Tracking")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: white; margin-bottom: 10px;")
+        layout.addWidget(title_label)
+
+        # Load map image
         pixmap = QPixmap(image_path)
-
-        # Load and scale the image if available
-        if not pixmap.isNull():
-            image_label.setPixmap(pixmap.scaled(900, 550, Qt.AspectRatioMode.KeepAspectRatio))
+        if pixmap.isNull():
+            print("[ERROR] Image failed to load")
+            image_label = QLabel("⚠️ Rock Yard Map failed to load.")
+            image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(image_label)
+            return container
         else:
-            # Display error message if image fails to load
-            image_label.setText("⚠️ Rock Yard Map failed to load.")
-            print(f"[WARNING] Failed to load rock yard map: {image_path}")
+            print(f"[INFO] Loaded image: {pixmap.width()} x {pixmap.height()}")
 
-        layout.addWidget(image_label)
+        # Create map label with Redis data integration
+        self.image_label = MapLabel(pixmap)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # Button row for map controls
+        button_row = QHBoxLayout()
+
+        # Measure button
+        measure_toggle = QPushButton("📏 Measure Distance")
+        measure_toggle.setCheckable(True)
+        measure_toggle.setStyleSheet("""
+            font-size: 14px;
+            background-color: navy;
+            color: white;
+            border-radius: 8px;
+            padding: 8px;
+            min-width: 150px;
+        """)
+        measure_toggle.clicked.connect(lambda: self.image_label.toggle_measure_mode(measure_toggle.isChecked()))
+        button_row.addWidget(measure_toggle)
+
+        # Clear clicks button
+        clear_button = QPushButton("🧹 Clear Clicks")
+        clear_button.setStyleSheet("""
+            font-size: 14px;
+            background-color: darkred;
+            color: white;
+            border-radius: 8px;
+            padding: 8px;
+            min-width: 150px;
+        """)
+        clear_button.clicked.connect(self.image_label.clear_clicks)
+        button_row.addWidget(clear_button)
+
+        layout.addLayout(button_row)
+
+        # Add image label to the layout
+        layout.addWidget(self.image_label)
+
+        # Use Redis data for actual positions
+        self._update_rock_yard_map()
+
         return container
+
+    def _update_rock_yard_map(self):
+        # Assuming you have a method to get the latest Redis data as a dictionary
+        redis_data = read_from_redis(self)  # This method should return your data dictionary
+
+        # Example dictionary structure:
+        # redis_data = {
+        #     "epoch": <timestamp>,
+        #     "data": {
+        #         17: <EVA1 PosX>,
+        #         18: <EVA1 PosY>,
+        #         19: <EVA1 Heading>,
+        #         20: <EVA2 PosX>,
+        #         21: <EVA2 PosY>,
+        #         22: <EVA2 Heading>,
+        #         23: <Rover PosX>,
+        #         24: <Rover PosY>,
+        #         25: <Rover QR_ID>,
+        #     }
+        # }
+
+        positions = redis_data.get("data", {})
+
+        # Extract positions for EVA1, EVA2, and Rover from the Redis data
+        eva1_pos_x = float(positions.get(17, 0))
+        eva1_pos_y = float(positions.get(18, 0))
+        eva2_pos_x = float(positions.get(20, 0))
+        eva2_pos_y = float(positions.get(21, 0))
+        rover_pos_x = float(positions.get(23, 0))
+        rover_pos_y = float(positions.get(24, 0))
+
+        # Plot positions on the map (map_x, map_y are pixel coordinates)
+        self._plot_on_map(eva1_pos_x, eva1_pos_y, "EVA1", self.image_label.eva1_trail)
+        self._plot_on_map(eva2_pos_x, eva2_pos_y, "EVA2", self.image_label.eva2_trail)
+        self._plot_on_map(rover_pos_x, rover_pos_y, "Rover", self.image_label.rover_trail)
+
+        self.image_label.update()
+
+    def _plot_on_map(self, pos_x, pos_y, label, trail):
+        # Convert position to map pixels
+        try:
+            # Assuming map_x and map_y are coordinates that map to pixels
+            pixel_x, pixel_y = self.image_label.map_to_pixel(pos_x, pos_y)
+            trail.append((pixel_x, pixel_y))
+        except ValueError:
+            print(f"[ERROR] Invalid position data for {label}: {pos_x}, {pos_y}")
+
 
 # Shared dictionary for data
 shared_results = {}
@@ -1056,10 +1478,9 @@ SystemStatusDisplay.read_json = read_from_redis
 # Main driver program
 if __name__ == "__main__":
     redis_thread = Thread(target=redis_polling_loop, daemon=True)
-    redis_thread.start() 
+    redis_thread.start()
 
     app = QApplication(sys.argv)
     window = MainWindow()
     window.showFullScreen()
     sys.exit(app.exec())
-
