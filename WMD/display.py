@@ -1309,17 +1309,6 @@ class MainWindow(QWidget):
 
             tab_bar.setTabTextColor(i, color)
 
-    def _advance_simulation(self):
-        map_x, map_y = simulation_pairs[self.sim_index]
-
-        pixel_x, pixel_y = self.image_label.map_to_pixel(map_x, map_y)
-
-        self.image_label.trail.append((pixel_x, pixel_y))
-        self.image_label.update()
-
-        self.sim_index = (self.sim_index + 1) % len(simulation_pairs)
-
-
     def create_rock_yard_map_tab(self):
         container = QWidget()
         layout = QVBoxLayout(container)
