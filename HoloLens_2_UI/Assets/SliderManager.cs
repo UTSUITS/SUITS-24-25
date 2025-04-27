@@ -21,4 +21,14 @@ public class SliderManager : MonoBehaviour
             binding.updater.Init(valueSource, binding.valueKey);
         }
     }
+
+    public void UpdateSliderValue(string key, float value)
+    {
+        var binding = sliders.Find(s => s.valueKey == key);
+        if (binding != null && binding.updater != null)
+        {
+            binding.updater.SetSliderValue(value);
+        }
+    }
+
 }
