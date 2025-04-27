@@ -1049,7 +1049,7 @@ class MainWindow(QWidget):
        self.blink_timer.start(300)
 
     def _advance_simulation(self):
-        data = SystemStatusDisplay.read_json(self)
+        data = SystemStatusDisplay.read_from_redis(self)
 
         def plot(key_x, key_y, trail):
             try:
@@ -1309,17 +1309,6 @@ class MainWindow(QWidget):
 
             tab_bar.setTabTextColor(i, color)
 
-    def _advance_simulation(self):
-        map_x, map_y = simulation_pairs[self.sim_index]
-
-        pixel_x, pixel_y = self.image_label.map_to_pixel(map_x, map_y)
-
-        self.image_label.trail.append((pixel_x, pixel_y))
-        self.image_label.update()
-
-        self.sim_index = (self.sim_index + 1) % len(simulation_pairs)
-
-
     def create_rock_yard_map_tab(self):
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -1349,12 +1338,12 @@ class MainWindow(QWidget):
 
         # Button row for map controls
         button_row = QHBoxLayout()
-
+        
         # Measure button
         measure_toggle = QPushButton("📏 Measure Distance")
         measure_toggle.setCheckable(True)
         measure_toggle.setStyleSheet("""
-            font-size: 14px;
+            font-size: 16px;
             background-color: navy;
             color: white;
             border-radius: 8px;
@@ -1363,12 +1352,12 @@ class MainWindow(QWidget):
         """)
         measure_toggle.clicked.connect(lambda: self.image_label.toggle_measure_mode(measure_toggle.isChecked()))
         button_row.addWidget(measure_toggle)
-
+        
         # Clear clicks button
-        clear_button = QPushButton("🧹 Clear Clicks")
+        clear_button = QPushButton("🗑️ Clear Clicks")
         clear_button.setStyleSheet("""
-            font-size: 14px;
-            background-color: darkred;
+            font-size: 16px;
+            background-color: #800000;
             color: white;
             border-radius: 8px;
             padding: 8px;
@@ -1376,63 +1365,113 @@ class MainWindow(QWidget):
         """)
         clear_button.clicked.connect(self.image_label.clear_clicks)
         button_row.addWidget(clear_button)
-
+        
+        # Clear trails button
+        clear_trails_button = QPushButton("🧹 Clear Trails")
+        clear_trails_button.setStyleSheet("""
+            font-size: 16px;
+            background-color: #804000;
+            color: white;
+            border-radius: 8px;
+            padding: 8px;
+            min-width: 150px;
+        """)
+        clear_trails_button.clicked.connect(self.image_label.clear_trails)
+        button_row.addWidget(clear_trails_button)
+        
         layout.addLayout(button_row)
-
-        # Add image label to the layout
         layout.addWidget(self.image_label)
+        
+        # Main horizontal layout for left (text) and right (map) sides
+        main_layout = QHBoxLayout()
+        
+        # Status bar for position info
+        status_layout = QHBoxLayout()
+        
+        # Display coordinates of current positions
+        status_box = QTextEdit()
+        status_box.setFixedHeight(80)
+        status_box.setReadOnly(True)
+        status_box.setStyleSheet("""
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 5px;
+            padding: 5px;
+            font-family: monospace;
+        """)
+        
+        # Status update timer
+        status_timer = QTimer(container)
+        
+        def update_status():
+            try:
+                with results_lock:
+                    data = shared_results
 
-        # Use Redis data for actual positions
-        self._update_rock_yard_map()
+                # Start building the table with font size adjustments and centering
+                status_html = """
+                <table width='100%' style='border-collapse: collapse; table-layout: auto;'>
+                    <tr>
+                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>Position</th>
+                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>X</th>
+                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>Y</th>
+                    </tr>
+                """
+
+                # Rover position
+                if 23 in data and 24 in data:
+                    rx = data.get(23, 'N/A')
+                    ry = data.get(24, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td style='text-align: center; font-size: 14px;'>{rx:.1f}</td><td style='text-align: center; font-size: 14px;'>{ry:.1f}</td></tr>"
+                else:
+                    status_html += "<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
+                # EVA1 position
+                if 17 in data and 18 in data:
+                    e1x = data.get(17, 'N/A')
+                    e1y = data.get(18, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td style='text-align: center; font-size: 14px;'>{e1x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e1y:.1f}</td></tr>"
+                else:
+                    status_html += "<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
+                # EVA2 position
+                if 20 in data and 21 in data:
+                    e2x = data.get(20, 'N/A')
+                    e2y = data.get(21, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td style='text-align: center; font-size: 14px;'>{e2x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e2y:.1f}</td></tr>"
+                else:
+                    status_html += "<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
+                # End the table
+                status_html += "</table>"
+
+                # Update the status box with the new HTML
+                status_box.setHtml(status_html)
+                
+                # Disabling scrollbars in QTextEdit
+                status_box.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+                status_box.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+
+            except Exception as e:
+                status_box.setText(f"Error reading position data: {e}")
+        
+        status_timer.timeout.connect(update_status)
+        status_timer.start(1000)  # Update every second
+        
+        # Add status box to layout
+        status_layout.addWidget(status_box)
+        main_layout.addLayout(status_layout)
+
+        # Right side: the map
+        map_layout = QVBoxLayout()
+        map_layout.addWidget(self.image_label)
+        main_layout.addLayout(map_layout)
+
+        # Add the main layout to the container
+        layout.addLayout(main_layout)
 
         return container
-
-    def _update_rock_yard_map(self):
-        # Assuming you have a method to get the latest Redis data as a dictionary
-        redis_data = read_from_redis(self)  # This method should return your data dictionary
-
-        # Example dictionary structure:
-        # redis_data = {
-        #     "epoch": <timestamp>,
-        #     "data": {
-        #         17: <EVA1 PosX>,
-        #         18: <EVA1 PosY>,
-        #         19: <EVA1 Heading>,
-        #         20: <EVA2 PosX>,
-        #         21: <EVA2 PosY>,
-        #         22: <EVA2 Heading>,
-        #         23: <Rover PosX>,
-        #         24: <Rover PosY>,
-        #         25: <Rover QR_ID>,
-        #     }
-        # }
-
-        positions = redis_data.get("data", {})
-
-        # Extract positions for EVA1, EVA2, and Rover from the Redis data
-        eva1_pos_x = float(positions.get(17, 0))
-        eva1_pos_y = float(positions.get(18, 0))
-        eva2_pos_x = float(positions.get(20, 0))
-        eva2_pos_y = float(positions.get(21, 0))
-        rover_pos_x = float(positions.get(23, 0))
-        rover_pos_y = float(positions.get(24, 0))
-
-        # Plot positions on the map (map_x, map_y are pixel coordinates)
-        self._plot_on_map(eva1_pos_x, eva1_pos_y, "EVA1", self.image_label.eva1_trail)
-        self._plot_on_map(eva2_pos_x, eva2_pos_y, "EVA2", self.image_label.eva2_trail)
-        self._plot_on_map(rover_pos_x, rover_pos_y, "Rover", self.image_label.rover_trail)
-
-        self.image_label.update()
-
-    def _plot_on_map(self, pos_x, pos_y, label, trail):
-        # Convert position to map pixels
-        try:
-            # Assuming map_x and map_y are coordinates that map to pixels
-            pixel_x, pixel_y = self.image_label.map_to_pixel(pos_x, pos_y)
-            trail.append((pixel_x, pixel_y))
-        except ValueError:
-            print(f"[ERROR] Invalid position data for {label}: {pos_x}, {pos_y}")
-
 
 # Shared dictionary for data
 shared_results = {}
