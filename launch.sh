@@ -108,7 +108,7 @@ restart_tmux_session "api" "cd /home/utsuits/Documents/SUITS-24-25/api && python
 echo "Flask and Redis are up and running!"
 
 # WMD session
-restart_tmux_session "WMD" "export DISPLAY=:0 && export QT_QPA_PLATFORM=xcb && export XAUTHORITY=/home/utsuits/.Xauthority && cd /home/utsuits/Documents/SUITS-24-25/WMD && python AG.py"
+restart_tmux_session "WMD" "export DISPLAY=:0 && export QT_QPA_PLATFORM=xcb && export XAUTHORITY=/home/utsuits/.Xauthority && cd /home/utsuits/Documents/SUITS-24-25/WMD && python display.py"
 
 echo "T-minus 3"
 sleep 1
