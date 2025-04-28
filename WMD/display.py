@@ -47,20 +47,20 @@ except Exception as e:
 
 # Maps telemetry command numbers to their display units
 UNIT_MAP = {
-    59: "sec",  64: "sec",
-    60: "%",    61: "%",    62: "psi", 63: "psi",
-    65: "BPM",  66: "L/min",
-    67: "L/min",
-    68: "psi",  69: "psi",  70: "psi", 71: "psi",
-    72: "RPM",  73: "RPM",
-    74: "psi",  75: "%",    76: "%",
-    77: "°F",   78: "mL",
-    79: "psi",  80: "psi",
-    81: "sec",  82: "%",    83: "%",   84: "psi", 85: "psi",
-    86: "sec",  87: "BPM",  88: "L/min",
-    89: "L/min", 90: "psi", 91: "psi", 92: "psi", 93: "psi",
-    94: "RPM",  95: "RPM",  96: "psi",
-    97: "%",    98: "%",    99: "°F", 100: "mL", 101: "psi", 102: "psi"
+    64: "sec",  69: "sec",
+    65: "%",    66: "%",    67: "psi", 68: "psi",
+    70: "BPM",  71: "psi/min",
+    72: "psi/min",
+    73: "psi",  74: "psi",  75: "psi", 76: "psi",
+    77: "RPM",  78: "RPM",
+    79: "psi",  80: "%",    81: "%",
+    82: "°F",   83: "%",
+    84: "psi",  85: "psi",
+    86: "sec",  87: "%",    88: "%",   89: "psi", 90: "psi",
+    91: "sec",  92: "BPM",  93: "psi/min",
+    94: "psi/min", 95: "psi", 96: "psi", 97: "psi", 98: "psi",
+    99: "RPM",  100: "RPM",  101: "psi",
+    102: "%",    103: "%",    104: "°F", 105: "%", 106: "psi", 107: "psi"
 }
 
 # Configure logging to file
@@ -195,17 +195,17 @@ class MapLabel(QLabel):
         self.update_timer.timeout.connect(self.update_position_from_redis)
         self.update_timer.start(500)  # Update every 500ms
         
-    def update_position_from_redis(self):
+    def update_position_from_redis(self): # CHECK THIS Richard G, naming for data variables might be wrong 
         """Fetches position data from Redis and updates trails"""
         try:
             with results_lock:
                 data = shared_results
                 
             # Update rover position if available
-            if 'rover_posx' in data and 'rover_posy' in data:
+            if 23 in data and 24 in data:
                 try:
-                    mx = float(data['rover_posx'])
-                    my = float(data['rover_posy'])
+                    mx = float(data[23])
+                    my = float(data[24])
                     px, py = self.map_to_pixel(mx, my)
                     self.rover_trail.append((px, py))
                     # Limit trail length to prevent performance issues
@@ -215,10 +215,10 @@ class MapLabel(QLabel):
                     pass
                     
             # Update EVA1 position if available
-            if 'imu_eva1_posx' in data and 'imu_eva1_posy' in data:
+            if 17 in data and 18 in data:
                 try:
-                    mx = float(data['imu_eva1_posx'])
-                    my = float(data['imu_eva1_posy'])
+                    mx = float(data[17])
+                    my = float(data[18])
                     px, py = self.map_to_pixel(mx, my)
                     self.eva1_trail.append((px, py))
                     if len(self.eva1_trail) > 100:
@@ -227,7 +227,7 @@ class MapLabel(QLabel):
                     pass
                     
             # Update EVA2 position if available
-            if 'imu_eva2_posx' in data and 'imu_eva2_posy' in data:
+            if 20 in data and 21 in data:
                 try:
                     mx = float(data['imu_eva2_posx'])
                     my = float(data['imu_eva2_posy'])
@@ -503,7 +503,7 @@ class SystemStatusDisplay(QWidget):
 
         # Create widget (slider or toggle/LED) for each telemetry key
         for idx, (key, label_text) in enumerate(keys_labels):
-            if (key in range(59, 103) or self.title_text.startswith("🧪")) and not use_leds:
+            if (key in range(64, 108) or self.title_text.startswith("🧪")) and not use_leds:
                 min_val, max_val = TELEMETRY_RANGE_MAP.get(key, (0, 100))
                 unit = UNIT_MAP.get(key, "")
                 widget = GradientSlider(min_val, max_val, scale=1, unit=unit)
@@ -853,7 +853,7 @@ class PieChartWidget(QWidget):
             wedges,
             [f"{label} ({self.values[i]:.2f})" for i, label in enumerate(self.labels)],
             loc='upper center',
-            bbox_to_anchor=(0.5, 1.20),  # ✅ moves legend higher
+            bbox_to_anchor=(0.5, 1.20),  # moves legend higher
             ncol=5,
             labelcolor='white',
             fontsize=10,
@@ -928,7 +928,7 @@ class PieChartDisplay(QWidget):
                 try:
                     new_val = float(raw_val)
                     new_values[idx] = new_val
-                    if abs(new_val - self.values[idx]) > 1e-3:  # 🧠 small threshold to detect change
+                    if abs(new_val - self.values[idx]) > 1e-3:  # small threshold to detect change
                         changed = True
                 except:
                     pass
@@ -963,14 +963,17 @@ class MainWindow(QWidget):
            ("Error Tracking", [(14, "Fan"), (15, "Oxygen"), (16, "Pump")], True),
            ("Rock Yard Map", [(17, "EVA1 PosX"), (18, "EVA1 PosY"), (19, "EVA1 Heading"), 
                               (20, "EVA2 PosX"), (21, "EVA2 PosY"), (22, "EVA2 Heading"), 
-                              (23, "Rover PosX"), (24, "Rover PosY"), (25, "Rover QR_ID")]),
-           ("EVA1 SPEC", [(27, "SiO2"), (28, "TiO2"), (29, "Al2O3"), (30, "FeO"), (31, "MnO"),
-                          (32, "MgO"), (33, "CaO"), (34, "K2O"), (35, "P2O3"), (36, "Other")]),
-           ("EVA2 SPEC", [(38, "SiO2"), (39, "TiO2"), (40, "Al2O3"), (41, "FeO"), (42, "MnO"),
-                          (43, "MgO"), (44, "CaO"), (45, "K2O"), (46, "P2O3"), (47, "Other")]),
-           ("UIA", [(48, "EVA1 Power"), (49, "EVA1 Oxy"), (50, "EVA1 Water Supply"), (51, "EVA1 Water Waste"),
-                    (52, "EVA2 Power"), (53, "EVA2 Oxy"), (54, "EVA2 Water Supply"), (55, "EVA2 Water Waste"),
-                    (56, "Oxy Vent"), (57, "Depress Pump")])
+                              (23, "LTV PosX"), (24, "LTV PosY"), 
+                              (25,"LTV POI 1 PosX"), (26,"LTV POI 1 PosY"), 
+                              (27,"LTV POI 2 PosX"), (28,"LTV POI 2 PosY"),
+                              (29,"LTV POI 3 PosX"), (30,"LTV POI 3 PosY")]),
+           ("EVA1 SPEC", [(31, "Spec ID"), (32, "SiO2"), (33, "TiO2"), (34, "Al2O3"), (35, "FeO"), (36, "MnO"),
+                          (37, "MgO"), (38, "CaO"), (39, "K2O"), (40, "P2O3"), (41, "Other")]),
+           ("EVA2 SPEC", [(42, "Spec ID"), (43, "SiO2"), (44, "TiO2"), (45, "Al2O3"), (46, "FeO"), (47, "MnO"),
+                          (48, "MgO"), (49, "CaO"), (50, "K2O"), (51, "P2O3"), (52, "Other")]),
+           ("UIA", [(53, "EVA1 Power"), (54, "EVA1 Oxy"), (55, "EVA1 Water Supply"), (56, "EVA1 Water Waste"),
+                    (57, "EVA2 Power"), (58, "EVA2 Oxy"), (59, "EVA2 Water Supply"), (60, "EVA2 Water Waste"),
+                    (61, "Oxy Vent"), (62, "Depress Pump")]) 
        ]
 
        # Loop through all tab definitions and create appropriate tabs
@@ -1036,16 +1039,16 @@ class MainWindow(QWidget):
 
         def plot(key_x, key_y, trail):
             try:
-                mx = float(data.get(key_x))
-                my = float(data.get(key_y))
+                mx = float(data[key_x])
+                my = float(data[key_y])
             except (TypeError, ValueError):
                 return
             px, py = self.image_label.map_to_pixel(mx, my)
             trail.append((px, py))
 
-        plot('rover_posx',    'rover_posy',    self.image_label.rover_trail)
-        plot('imu_eva1_posx', 'imu_eva1_posy', self.image_label.eva1_trail)
-        plot('imu_eva2_posx', 'imu_eva2_posy', self.image_label.eva2_trail)
+        plot(23, 24, self.image_label.rover_trail)
+        plot(17, 18, self.image_label.eva1_trail)
+        plot(20, 21, self.image_label.eva2_trail)
 
         self.image_label.update()
 
@@ -1082,14 +1085,14 @@ class MainWindow(QWidget):
 
         # First telemetry sub-tab
         eva1_display = SystemStatusDisplay("📡 EVA1 TELEMETRY-1 📡", [
-            (59, "Batt Time Left"),
-            (60, "Oxy Pri Storage"),
-            (61, "Oxy Sec Storage"),
-            (62, "Oxy Pri Pressure"),
-            (63, "Oxy Sec Pressure"),
-            (64, "Oxy Time Left"),
-            (65, "Heart Rate"),
-            (66, "Oxy Consumption")
+            (64, "Batt Time Left"),
+            (65, "Oxy Pri Storage"),
+            (66, "Oxy Sec Storage"),
+            (67, "Oxy Pri Pressure"),
+            (68, "Oxy Sec Pressure"),
+            (69, "Oxy Time Left"),
+            (70, "Heart Rate"),
+            (71, "Oxy Consumption")
         ])
         sub_tabs.addTab(eva1_display, "EVA1 TELEMETRY-1")
         self.displays.append(eva1_display)
@@ -1097,13 +1100,13 @@ class MainWindow(QWidget):
 
         # Second telemetry sub-tab
         eva2_display = SystemStatusDisplay("📡 EVA1 TELEMETRY-2 📡", [
-            (67, "CO2 Production"),
-            (68, "Suit Pressure Oxy"),
-            (69, "Suit Pressure CO2"),
-            (70, "Suit Pressure Other"),
-            (71, "Suit Pressure Total"),
-            (72, "Fan Pri RPM"),
-            (73, "Fan Sec RPM")
+            (72, "CO2 Production"),
+            (73, "Suit Pressure Oxy"),
+            (74, "Suit Pressure CO2"),
+            (75, "Suit Pressure Other"),
+            (76, "Suit Pressure Total"),
+            (77, "Fan Pri RPM"),
+            (78, "Fan Sec RPM")
         ])
         sub_tabs.addTab(eva2_display, "EVA1 TELEMETRY-2")
         self.displays.append(eva2_display)
@@ -1111,13 +1114,13 @@ class MainWindow(QWidget):
 
         # Third telemetry sub-tab
         eva3_display = SystemStatusDisplay("📡 EVA TELEMETRY-3 📡", [
-            (74, "Helmet Pressure CO2"),
-            (75, "Scrubber A CO2 Storage"),
-            (76, "Scrubber B CO2 Storage"),
-            (77, "Temperature"),
-            (78, "Coolant mL"),
-            (79, "Coolant Gas Pressure"),
-            (80, "Coolant Liquid Pressure")
+            (79, "Helmet Pressure CO2"),
+            (80, "Scrubber A CO2 Storage"),
+            (81, "Scrubber B CO2 Storage"),
+            (82, "Temperature"),
+            (83, "Coolant mL/Storage"),
+            (84, "Coolant Gas Pressure"),
+            (85, "Coolant Liquid Pressure")
         ])
         sub_tabs.addTab(eva3_display, "EVA TELEMETRY-3")
         self.displays.append(eva3_display)
@@ -1159,14 +1162,14 @@ class MainWindow(QWidget):
 
         # First telemetry sub-tab for EVA2
         eva1_display = SystemStatusDisplay("📡 EVA2 TELEMETRY-1 📡", [
-            (81, "Batt Time Left"),
-            (82, "Oxy Pri Storage"),
-            (83, "Oxy Sec Storage"),
-            (84, "Oxy Pri Pressure"),
-            (85, "Oxy Sec Pressure"),
-            (86, "Oxy Time Left"),
-            (87, "Heart Rate"),
-            (88, "Oxy Consumption")
+            (86, "Batt Time Left"),
+            (87, "Oxy Pri Storage"),
+            (88, "Oxy Sec Storage"),
+            (89, "Oxy Pri Pressure"),
+            (90, "Oxy Sec Pressure"),
+            (91, "Oxy Time Left"),
+            (92, "Heart Rate"),
+            (93, "Oxy Consumption")
         ])
         sub_tabs.addTab(eva1_display, "EVA2 TELEMETRY-1")
         self.displays.append((eva1_display, sub_tabs))
@@ -1174,13 +1177,13 @@ class MainWindow(QWidget):
 
         # Second telemetry sub-tab for EVA2
         eva2_display = SystemStatusDisplay("📡 EVA2 TELEMETRY-2 📡", [
-            (89, "CO2 Production"),
-            (90, "Suit Pressure Oxy"),
-            (91, "Suit Pressure CO2"),
-            (92, "Suit Pressure Other"),
-            (93, "Suit Pressure Total"),
-            (94, "Fan Pri RPM"),
-            (95, "Fan Sec RPM")
+            (94, "CO2 Production"),
+            (95, "Suit Pressure Oxy"),
+            (96, "Suit Pressure CO2"),
+            (97, "Suit Pressure Other"),
+            (98, "Suit Pressure Total"),
+            (99, "Fan Pri RPM"),
+            (100, "Fan Sec RPM")
         ])
         sub_tabs.addTab(eva2_display, "EVA2 TELEMETRY-2")
         self.displays.append((eva2_display, sub_tabs))
@@ -1188,13 +1191,13 @@ class MainWindow(QWidget):
 
         # Third telemetry sub-tab for EVA2
         eva3_display = SystemStatusDisplay("📡 EVA TELEMETRY-3 📡", [
-            (96, "Helmet Pressure CO2"),
-            (97, "Scrubber A CO2 Storage"),
-            (98, "Scrubber B CO2 Storage"),
-            (99, "Temperature"),
-            (100, "Coolant mL"),
-            (101, "Coolant Gas Pressure"),
-            (102, "Coolant Liquid Pressure")
+            (101, "Helmet Pressure CO2"),
+            (102, "Scrubber A CO2 Storage"),
+            (103, "Scrubber B CO2 Storage"),
+            (104, "Temperature"),
+            (105, "Coolant mL/Storage"),
+            (106, "Coolant Gas Pressure"),
+            (107, "Coolant Liquid Pressure")
         ])
         sub_tabs.addTab(eva3_display, "EVA TELEMETRY-3")
         self.displays.append((eva3_display, sub_tabs))
@@ -1237,9 +1240,9 @@ class MainWindow(QWidget):
 
         # First EVA states sub-tab (DCU/UIA related states)
         state1 = SystemStatusDisplay("📡 EVA STATES - 1 📡", [
-            (103, "EVA-Started"), (104, "EVA-Paused"), (105, "EVA-Completed"),
-            (106, "EVA-Total_time"), (107, "UIA-Started"), (108, "UIA-completed"),
-            (109, "UIA-Time"), (110, "DCU-Started")
+            (108, "EVA-Started"), (109, "EVA-Paused"), (110, "EVA-Completed"),
+            (111, "EVA-Total_time"), (112, "UIA-Started"), (113, "UIA-completed"),
+            (114, "UIA-Time"), (115, "DCU-Started")
         ])
         sub_tabs.addTab(state1, "EVA STATES-1")
         self.displays.append(state1)
@@ -1247,9 +1250,9 @@ class MainWindow(QWidget):
 
         # Second EVA states sub-tab (Rover and Spec activity states)
         state2 = SystemStatusDisplay("📡 EVA STATES - 2 📡", [
-            (111, "DCU-completed"), (112, "DCU-Time"), (113, "Rover-Started"),
-            (114, "Rover-completed"), (115, "Rover-Time"), (116, "Spec-Started"),
-            (117, "Spec-completed"), (118, "Spec-Time")
+            (116, "DCU-completed"), (117, "DCU-Time"), (118, "Rover-Started"),
+            (119, "Rover-completed"), (120, "Rover-Time"), (121, "Spec-Started"),
+            (122, "Spec-completed"), (123, "Spec-Time")
         ])
         sub_tabs.addTab(state2, "EVA STATES-2")
         self.displays.append(state2)
@@ -1395,9 +1398,10 @@ class MainWindow(QWidget):
                 status_html = """
                 <table width='100%' style='border-collapse: collapse; table-layout: auto;'>
                     <tr>
-                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>Position</th>
-                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>X</th>
-                        <th style='text-align: center; width: 30%; padding-right: 10px; color: white; font-size: 16px;'>Y</th>
+                        <th style='text-align: center; width: 25%; padding-right: 10px; color: white; font-size: 16px;'>Position</th>
+                        <th style='text-align: center; width: 25%; padding-right: 10px; color: white; font-size: 16px;'>X</th>
+                        <th style='text-align: center; width: 25%; padding-right: 10px; color: white; font-size: 16px;'>Y</th>
+                        <th style='text-align: center; width: 25%; padding-right: 10px; color: white; font-size: 16px;'>Heading</th>
                     </tr>
                 """
 
@@ -1405,27 +1409,55 @@ class MainWindow(QWidget):
                 if 23 in data and 24 in data:
                     rx = data.get(23, 'N/A')
                     ry = data.get(24, 'N/A')
-                    status_html += f"<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td style='text-align: center; font-size: 14px;'>{rx:.1f}</td><td style='text-align: center; font-size: 14px;'>{ry:.1f}</td></tr>"
+                    status_html += f"<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td style='text-align: center; font-size: 14px;'>{rx:.1f}</td><td style='text-align: center; font-size: 14px;'>{ry:.1f}</td><td></td></tr>"
                 else:
-                    status_html += "<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+                    status_html += "<tr><td style='text-align: center; color:red; font-size: 14px;'>ROVER:</td><td colspan='3' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
 
                 # EVA1 position
-                if 17 in data and 18 in data:
+                if 17 in data and 18 in data and 19 in data:
                     e1x = data.get(17, 'N/A')
                     e1y = data.get(18, 'N/A')
-                    status_html += f"<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td style='text-align: center; font-size: 14px;'>{e1x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e1y:.1f}</td></tr>"
+                    heading = data.get(19, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td style='text-align: center; font-size: 14px;'>{e1x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e1y:.1f}</td><td style='text-align: center; font-size: 14px;'>{heading:.1f}</td></tr>"
                 else:
-                    status_html += "<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+                    status_html += "<tr><td style='text-align: center; color:green; font-size: 14px;'>EVA1:</td><td colspan='3' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
 
                 # EVA2 position
-                if 20 in data and 21 in data:
+                if 20 in data and 21 in data and 22 in data:
                     e2x = data.get(20, 'N/A')
                     e2y = data.get(21, 'N/A')
-                    status_html += f"<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td style='text-align: center; font-size: 14px;'>{e2x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e2y:.1f}</td></tr>"
+                    e2_heading = data.get(22, 'N/A')
+                    status_html += f"<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td style='text-align: center; font-size: 14px;'>{e2x:.1f}</td><td style='text-align: center; font-size: 14px;'>{e2y:.1f}</td><td style='text-align: center; font-size: 14px;'>{e2_heading:.1f}</td></tr>"
                 else:
-                    status_html += "<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+                    status_html += "<tr><td style='text-align: center; color:blue; font-size: 14px;'>EVA2:</td><td colspan='3' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
 
                 # End the table
+                status_html += "</table>"
+
+                # Add a second table: Points of Interest
+                status_html += """
+                <br><br>
+                <table width='100%' style='border-collapse: collapse; table-layout: auto;'>
+                    <tr>
+                        <th style='text-align: center; width: 33%; padding-right: 10px; color: white; font-size: 16px;'>POI</th>
+                        <th style='text-align: center; width: 33%; padding-right: 10px; color: white; font-size: 16px;'>X</th>
+                        <th style='text-align: center; width: 33%; padding-right: 10px; color: white; font-size: 16px;'>Y</th>
+                    </tr>
+                """
+
+                # Loop through 3 POIs
+                poi_labels = ["POI1", "POI2", "POI3"]
+                poi_indices = [(25, 26), (27, 28), (29, 30)]
+        
+                for label, (x_idx, y_idx) in zip(poi_labels, poi_indices):
+                    if x_idx in data and y_idx in data:
+                        px = data.get(x_idx, 'N/A')
+                        py = data.get(y_idx, 'N/A')
+                        status_html += f"<tr><td style='text-align: center; color:yellow; font-size: 14px;'>{label}</td><td style='text-align: center; font-size: 14px;'>{px:.1f}</td><td style='text-align: center; font-size: 14px;'>{py:.1f}</td></tr>"
+                    else:
+                        status_html += f"<tr><td style='text-align: center; color:yellow; font-size: 14px;'>{label}</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+
+                # End the POI table
                 status_html += "</table>"
 
                 # Update the status box with the new HTML
