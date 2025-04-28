@@ -17,7 +17,7 @@ rd=redis.Redis(host='localhost', port=6379,db=0)
 
 app = Flask(__name__)
 
-float_outputs = set(range(17, 23)) | set(range(27, 37)) | set(range(38, 48)) | set(range(58,103)) | {106,109,112,115,118}
+float_outputs = set(range(17, 31)) | set(range(32, 42)) | set(range(43, 53)) | set(range(63,108)) | {111,114,117,120,123}
 
 # Builds the raw UDP packet for a command
 def build_udp_message(request_time, command, team_num):
@@ -44,10 +44,10 @@ def collect_data():
             udp_socket.settimeout(0.2)  # Adjust if needed
             server = (ip_address, 14141) 
 
-            # Send all 118 requests
-            for command in range(1, 119):
+            # Send all requests 
+            for command in range(1, 124): 
                 try:
-                    if command >= 58:
+                    if command >= 63:
                         message = build_udp_message(request_time, command, team_num)
                     else:
                         message = build_udp_message(request_time, command, None)
@@ -60,7 +60,7 @@ def collect_data():
             received_commands = set()
             max_attempts = 150  # cap to avoid infinite loop
 
-            while len(received_commands) < 118 and max_attempts > 0:
+            while len(received_commands) < 123 and max_attempts > 0:
                 try:
                     data, addr = udp_socket.recvfrom(1024)
                     server_time, command_received, output_data = parse_udp_response(data)
@@ -81,7 +81,7 @@ def collect_data():
                     max_attempts -= 1
 
             # Fill missing commands with None
-            for command in range(1, 119):
+            for command in range(1, 124):
                 if command not in results:
                     results[command] = None
 
