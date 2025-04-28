@@ -30,20 +30,9 @@ sudo apt install python3-flask python3-redis python3-matplotlib
 # Installing pyqt6 dependencies 
 sudo apt install ninja-build libfontconfig1-dev libdbus-1-dev libfreetype6-dev libicu-dev libinput-dev libxkbcommon-dev libsqlite3-dev libssl-dev libpng-dev libjpeg-dev libglib2.0-dev libgles2-mesa-dev libgbm-dev libdrm-dev libx11-dev libxcb1-dev libxext-dev libxi-dev libxcomposite-dev libxcursor-dev libxtst-dev libxrandr-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev libxrender-dev libxcb1-dev libxcb-glx0-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-shm0-dev libxcb-icccm4-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-shape0-dev libxcb-randr0-dev libxcb-render-util0-dev libxcb-util0-dev libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb-xinput-dev
 
-echo "Setting up Python virtual environment..."
-# Create a project directory if needed
-mkdir -p ~/Projects
-cd ~/Projects
+sudo apt install qt6-base-dev
 
-# Make a virtual environment
-python3.11 -m venv pi_venv
-
-# Activate it
-source ~/Projects/pi_venv/bin/activate
-
-echo "Upgrading pip and installing Python packages inside venv..."
-pip install --upgrade pip
-pip install flask redis PyQt6
+sudo apt install python3-pyqt6
 
 echo "Installing Tailscale..."
 # Install Tailscale the official way
