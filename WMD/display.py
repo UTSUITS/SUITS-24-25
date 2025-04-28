@@ -229,8 +229,8 @@ class MapLabel(QLabel):
             # Update EVA2 position if available
             if 20 in data and 21 in data:
                 try:
-                    mx = float(data['imu_eva2_posx'])
-                    my = float(data['imu_eva2_posy'])
+                    mx = float(data[20])
+                    my = float(data[21])
                     px, py = self.map_to_pixel(mx, my)
                     self.eva2_trail.append((px, py))
                     if len(self.eva2_trail) > 100:
@@ -1448,17 +1448,28 @@ class MainWindow(QWidget):
                 # Loop through 3 POIs
                 poi_labels = ["POI1", "POI2", "POI3"]
                 poi_indices = [(25, 26), (27, 28), (29, 30)]
-        
+
+                # Flag to check if any POI has valid data
+                poi_found = False
+
                 for label, (x_idx, y_idx) in zip(poi_labels, poi_indices):
                     if x_idx in data and y_idx in data:
                         px = data.get(x_idx, 'N/A')
                         py = data.get(y_idx, 'N/A')
-                        status_html += f"<tr><td style='text-align: center; color:yellow; font-size: 14px;'>{label}</td><td style='text-align: center; font-size: 14px;'>{px:.1f}</td><td style='text-align: center; font-size: 14px;'>{py:.1f}</td></tr>"
-                    else:
-                        status_html += f"<tr><td style='text-align: center; color:yellow; font-size: 14px;'>{label}</td><td colspan='2' style='text-align: center; font-size: 14px;'>No position data</td></tr>"
+                        print(py)
+
+                        # Only show POI if both X and Y are valid
+                        if px != 'N/A' and py != 'N/A':
+                            status_html += f"<tr><td style='text-align: center; color:yellow; font-size: 14px;'>{label}</td><td style='text-align: center; font-size: 14px;'>{px:.1f}</td><td style='text-align: center; font-size: 14px;'>{py:.1f}</td></tr>"
+                            poi_found = True
+
+                # If no POI was found, show a default message
+                if not poi_found:
+                    status_html += "<tr><td colspan='3' style='text-align: center; font-size: 14px; color: gray;'>No Points of Interest set yet</td></tr>"
 
                 # End the POI table
                 status_html += "</table>"
+
 
                 # Update the status box with the new HTML
                 status_box.setHtml(status_html)
