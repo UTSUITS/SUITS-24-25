@@ -238,7 +238,26 @@ class MapLabel(QLabel):
                 except (ValueError, TypeError) as e:
                     pass
                 
+            # Update Points of Interest (POIs)
+            poi_indices = [(25, 26), (27, 28), (29, 30)]  # Indices for POI X, Y
+            for i, (x_idx, y_idx) in enumerate(poi_indices, start=1):
+                if x_idx in data and y_idx in data:
+                    try:
+                        mx = float(data[x_idx])
+                        my = float(data[y_idx])
+                        px, py = self.map_to_pixel(mx, my)
+                        # Assuming you have POI trails to store the points
+                        poi_trail = getattr(self, f'poi{i}_trail', [])
+                        poi_trail.append((px, py))
+                        # Limit trail length
+                        if len(poi_trail) > 100:
+                            poi_trail = poi_trail[-100:]
+                        setattr(self, f'poi{i}_trail', poi_trail)
+                    except (ValueError, TypeError) as e:
+                        pass
+
             self.update()
+            
         except Exception as e:
             print(f"[ERROR] Failed to update position from Redis: {e}")
 
@@ -1456,7 +1475,6 @@ class MainWindow(QWidget):
                     if x_idx in data and y_idx in data:
                         px = data.get(x_idx, 'N/A')
                         py = data.get(y_idx, 'N/A')
-                        print(py)
 
                         # Only show POI if both X and Y are valid
                         if px != 'N/A' and py != 'N/A':
@@ -1467,9 +1485,11 @@ class MainWindow(QWidget):
                 if not poi_found:
                     status_html += "<tr><td colspan='3' style='text-align: center; font-size: 14px; color: gray;'>No Points of Interest set yet</td></tr>"
 
-                # End the POI table
+                # # End the POI table
                 status_html += "</table>"
 
+                status_box.setMinimumHeight(400)  # Adjust this value to make the widget taller
+                status_box.setMaximumHeight(600) 
 
                 # Update the status box with the new HTML
                 status_box.setHtml(status_html)
