@@ -4,9 +4,10 @@
 
 export DISPLAY=:0
 export QT_QPA_PLATFORM=xcb 
-export XAUTHORITY=/home/utsuits/.Xauthority
+# export XAUTHORITY=/home/utsuits/.Xauthority
 
 # Prompt for IP address if not already saved
+rm /home/utsuits/ip_address.txt 
 IP_FILE="/home/utsuits/ip_address.txt"
 
 # Only prompt in interactive shells (so it doesn't break scripts or systemd)
@@ -76,9 +77,9 @@ fi
 # Start Redis container if not already running
 if ! docker ps | grep -q redis:7; then
     echo "Starting Redis container..."
-    cd /home/utsuits/Documents/SUITS-24-25/api
-    docker compose down
-    docker compose up -d 
+    cd /home/utsuits/SUITS-24-25/api
+    docker-compose down
+    docker-compose up -d 
 fi
 
 # Wait until Redis is ready
@@ -104,11 +105,11 @@ restart_tmux_session() {
 }
 
 # Flask-Redis session
-restart_tmux_session "api" "cd /home/utsuits/Documents/SUITS-24-25/api && python commands_api.py"
+restart_tmux_session "api" "cd /home/utsuits/SUITS-24-25/api && python commands_api.py"
 echo "Flask and Redis are up and running!"
 
 # WMD session
-restart_tmux_session "WMD" "export DISPLAY=:0 && export QT_QPA_PLATFORM=xcb && export XAUTHORITY=/home/utsuits/.Xauthority && cd /home/utsuits/Documents/SUITS-24-25/WMD && python display.py"
+restart_tmux_session "WMD" "export DISPLAY=:0 && export QT_QPA_PLATFORM=xcb && export XAUTHORITY=/home/utsuits/.Xauthority && cd /home/utsuits/SUITS-24-25/WMD && python display.py"
 
 echo "T-minus 3"
 sleep 1

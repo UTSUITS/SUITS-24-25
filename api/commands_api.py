@@ -128,8 +128,8 @@ def get_logs(epochs):
     if command is not None:
         try: 
             command = int(command) 
-            if not 1 <= command <= 118:
-                return "Command must be between 1 and 118\n", 400
+            if not 1 <= command <= 123:
+                return "Command must be between 1 and 123\n", 400
         except ValueError: 
             logging.error("Invalid command parameter; command must be an integer \n")
             return "Invalid command parameter; command must be an integer \n", 400

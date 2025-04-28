@@ -34,8 +34,8 @@ rd=redis.Redis(host='localhost', port=6379,db=0)
 
 # Load telemetry range data from a JSON file and store in a map
 #json_path = r"C:\\output_results.json"
-image_path = r"/home/utsuits/Documents/SUITS-24-25/WMD/rockYardMap-min.png"
-Telemetry_path = r"/home/utsuits/Documents/SUITS-24-25/WMD/EVA_Telemetry_Commands_Capacity_Ranges.json"
+image_path = r"/home/utsuits/SUITS-24-25/WMD/rockYardMap-min.png"
+Telemetry_path = r"/home/utsuits/SUITS-24-25/WMD/EVA_Telemetry_Commands_Capacity_Ranges.json"
 
 try:
     with open(Telemetry_path, 'r') as f:
