@@ -44,10 +44,15 @@ try:
         elif GPIO.input(pins["right"]) == GPIO.LOW:
             device.emit(uinput.REL_X, delta)
             time.sleep(0.02)
+            
+        # Handle click with continuous press
         elif GPIO.input(pins["center"]) == GPIO.LOW:
             device.emit(uinput.BTN_LEFT, 1)  # Press
-            time.sleep(0.05)
+            while GPIO.input(pins["center"]) == GPIO.LOW:  # While button is held down
+                device.emit(uinput.BTN_LEFT, 1)  # Keep pressing
+                time.sleep(0.01)  # Short delay to avoid overwhelming system
             device.emit(uinput.BTN_LEFT, 0)  # Release
+            time.sleep(0.05)  # Debounce for the release of the button
 
 
 except KeyboardInterrupt:
