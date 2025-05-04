@@ -27,26 +27,26 @@ device = uinput.Device([
 ])
 
 # Pixel delta per move
-delta = 1
+delta = 5
 
 try:
     print("Joystick uinput mouse control running (Ctrl+C to exit)")
     while True:
         if GPIO.input(pins["up"]) == GPIO.LOW:
             device.emit(uinput.REL_Y, -delta)
-            time.sleep(0.1)
+            time.sleep(0)
         elif GPIO.input(pins["down"]) == GPIO.LOW:
             device.emit(uinput.REL_Y, delta)
-            time.sleep(0.1)
+            time.sleep(0)
         elif GPIO.input(pins["left"]) == GPIO.LOW:
             device.emit(uinput.REL_X, -delta)
-            time.sleep(0.1)
+            time.sleep(0)
         elif GPIO.input(pins["right"]) == GPIO.LOW:
             device.emit(uinput.REL_X, delta)
-            time.sleep(0.1)
+            time.sleep(0)
         elif GPIO.input(pins["center"]) == GPIO.LOW:
             device.emit_click(uinput.BTN_LEFT)
-            time.sleep(0.2)
+            time.sleep(0)
 
 except KeyboardInterrupt:
     print("Cleaning up GPIO.")
