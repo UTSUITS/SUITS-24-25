@@ -44,6 +44,7 @@ try:
         elif GPIO.input(pins["right"]) == GPIO.LOW:
             device.emit(uinput.REL_X, delta)
             time.sleep(0.02)
+            
         elif GPIO.input(pins["center"]) == GPIO.LOW:
             device.emit(uinput.BTN_LEFT, 1)  # Press
             time.sleep(0.05)
