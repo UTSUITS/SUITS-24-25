@@ -45,8 +45,10 @@ try:
             device.emit(uinput.REL_X, delta)
             time.sleep(0.001)
         elif GPIO.input(pins["center"]) == GPIO.LOW:
-            device.emit_click(uinput.BTN_LEFT)
-            time.sleep(0.2)
+            device.emit(uinput.BTN_LEFT, 1)  # Press
+            time.sleep(0.05)
+            device.emit(uinput.BTN_LEFT, 0)  # Release
+
 
 except KeyboardInterrupt:
     print("Cleaning up GPIO.")
