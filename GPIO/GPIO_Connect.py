@@ -27,7 +27,7 @@ device = uinput.Device([
 ])
 
 # Pixel delta per move
-delta = 20
+delta = 1
 
 try:
     print("Joystick uinput mouse control running (Ctrl+C to exit)")
