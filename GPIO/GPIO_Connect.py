@@ -46,7 +46,7 @@ try:
             time.sleep(0.001)
         elif GPIO.input(pins["center"]) == GPIO.LOW:
             device.emit_click(uinput.BTN_LEFT)
-            time.sleep(0.01)
+            time.sleep(0.2)
 
 except KeyboardInterrupt:
     print("Cleaning up GPIO.")
