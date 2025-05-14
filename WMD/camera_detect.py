@@ -1,65 +1,51 @@
-from PyQt5 import QtWidgets
-from PyQt5.QtGui import QImage,QPixmap
-from PyQt5.QtCore import QThread,pyqtSignal as Signal,pyqtSlot as Slot
-import cv2,imutils
 import sys
+from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtCore import QTimer
+from picamera2 import Picamera2
 
-class MyThread(QThread):
-    frame_signal = Signal(QImage)
 
-    def run(self):
-        self.cap = cv2.VideoCapture(0)
-        while self.cap.isOpened():
-            _,frame = self.cap.read()
-            frame = self.cvimage_to_label(frame)
-            self.frame_signal.emit(frame)
-    
-    def cvimage_to_label(self,image):
-        image = imutils.resize(image,width = 640)
-        image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-        image = QImage(image,
-                       image.shape[1],
-                       image.shape[0],
-                       QImage.Format_RGB888)
-        return image
-
-class MainApp(QtWidgets.QMainWindow):
+class PiCameraViewer(QWidget):
     def __init__(self):
         super().__init__()
-        self.init_ui()
-        self.show()
-    
-    def init_ui(self):
-        self.setFixedSize(640,640)
-        self.setWindowTitle("Camera FeedBack")
+        self.setWindowTitle("Raspberry Pi Camera - PyQt6")
 
-        widget = QtWidgets.QWidget(self)
+        # Layout and image label
+        self.image_label = QLabel()
+        layout = QVBoxLayout()
+        layout.addWidget(self.image_label)
+        self.setLayout(layout)
 
-        layout = QtWidgets.QVBoxLayout()
-        widget.setLayout(layout)
+        # Initialize camera
+        self.picam2 = Picamera2()
+        config = self.picam2.create_preview_configuration(
+            main={"format": "RGB888", "size": (640, 480)}
+        )
+        self.picam2.configure(config)
+        self.picam2.start()
 
-        self.label = QtWidgets.QLabel()
-        layout.addWidget(self.label)
+        # Timer for periodic updates
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frame)
+        self.timer.start(30)  # ~30 FPS
 
-        self.open_btn = QtWidgets.QPushButton("Open The Camera", clicked=self.open_camera)
-        layout.addWidget(self.open_btn)
+    def update_frame(self):
+        # Get the latest frame
+        frame = self.picam2.capture_array()
 
-        self.camera_thread = MyThread()
-        self.camera_thread.frame_signal.connect(self.setImage)
+        # Convert to QImage and display
+        height, width, channel = frame.shape
+        bytes_per_line = width * channel
+        q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+        self.image_label.setPixmap(QPixmap.fromImage(q_image))
 
-        self.setCentralWidget(widget)
-    
-    def open_camera(self):        
-        self.camera_thread.start()
-        print(self.camera_thread.isRunning())
-
-    @Slot(QImage)
-    def setImage(self,image):
-        self.label.setPixmap(QPixmap.fromImage(image))
-
+    def closeEvent(self, event):
+        self.picam2.stop()
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":
-    app = QtWidgets.QApplication([])
-    main_window = MainApp()
+    app = QApplication(sys.argv)
+    viewer = PiCameraViewer()
+    viewer.show()
     sys.exit(app.exec())
