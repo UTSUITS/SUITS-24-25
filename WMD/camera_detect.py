@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import QTimer
@@ -32,6 +33,9 @@ class PiCameraViewer(QWidget):
     def update_frame(self):
         # Get the latest frame
         frame = self.picam2.capture_array()
+
+        # Manually swap Red and Blue channels
+        frame = frame[:, :, [2, 1, 0]]  # BGR to RGB manually
 
         # Convert to QImage and display
         height, width, channel = frame.shape
