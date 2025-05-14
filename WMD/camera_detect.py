@@ -40,7 +40,11 @@ class PiCameraViewer(QWidget):
         # Convert to QImage and display
         height, width, channel = frame.shape
         bytes_per_line = width * channel
+        
+        # Use QImage correctly
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
+        
+        # Set the pixmap to display the image
         self.image_label.setPixmap(QPixmap.fromImage(q_image))
 
     def closeEvent(self, event):
