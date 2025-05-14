@@ -1,48 +1,65 @@
+from PyQt5 import QtWidgets
+from PyQt5.QtGui import QImage,QPixmap
+from PyQt5.QtCore import QThread,pyqtSignal as Signal,pyqtSlot as Slot
+import cv2,imutils
 import sys
-import cv2
-from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
-from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtCore import QTimer
 
+class MyThread(QThread):
+    frame_signal = Signal(QImage)
 
-class LibcameraStreamApp(QWidget):
+    def run(self):
+        self.cap = cv2.VideoCapture(0)
+        while self.cap.isOpened():
+            _,frame = self.cap.read()
+            frame = self.cvimage_to_label(frame)
+            self.frame_signal.emit(frame)
+    
+    def cvimage_to_label(self,image):
+        image = imutils.resize(image,width = 640)
+        image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
+        image = QImage(image,
+                       image.shape[1],
+                       image.shape[0],
+                       QImage.Format_RGB888)
+        return image
+
+class MainApp(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Live Camera Stream")
+        self.init_ui()
+        self.show()
+    
+    def init_ui(self):
+        self.setFixedSize(640,640)
+        self.setWindowTitle("Camera FeedBack")
 
-        # Setup UI
-        self.image_label = QLabel()
-        layout = QVBoxLayout()
-        layout.addWidget(self.image_label)
-        self.setLayout(layout)
+        widget = QtWidgets.QWidget(self)
 
-        # Use OpenCV to open /dev/video0 using V4L2 (libcamera backend)
-        self.cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-        if not self.cap.isOpened():
-            raise RuntimeError("Failed to open /dev/video0 with libcamera via V4L2")
+        layout = QtWidgets.QVBoxLayout()
+        widget.setLayout(layout)
 
-        # Frame update timer
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_frame)
-        self.timer.start(30)
+        self.label = QtWidgets.QLabel()
+        layout.addWidget(self.label)
 
-    def update_frame(self):
-        ret, frame = self.cap.read()
-        if ret:
-            # Convert BGR to RGB for Qt display
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = frame_rgb.shape
-            bytes_per_line = ch * w
-            qt_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-            self.image_label.setPixmap(QPixmap.fromImage(qt_image))
+        self.open_btn = QtWidgets.QPushButton("Open The Camera", clicked=self.open_camera)
+        layout.addWidget(self.open_btn)
 
-    def closeEvent(self, event):
-        self.cap.release()
-        super().closeEvent(event)
+        self.camera_thread = MyThread()
+        self.camera_thread.frame_signal.connect(self.setImage)
+
+        self.setCentralWidget(widget)
+    
+    def open_camera(self):        
+        self.camera_thread.start()
+        print(self.camera_thread.isRunning())
+
+    @Slot(QImage)
+    def setImage(self,image):
+        self.label.setPixmap(QPixmap.fromImage(image))
+
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = LibcameraStreamApp()
-    window.show()
+    app = QtWidgets.QApplication([])
+    main_window = MainApp()
     sys.exit(app.exec())
