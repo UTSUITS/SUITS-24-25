@@ -1,4 +1,4 @@
-\import sys
+import sys
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import QTimer
