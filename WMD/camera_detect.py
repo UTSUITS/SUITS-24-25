@@ -1,51 +1,42 @@
 import sys
-import numpy as np
+import cv2
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import QTimer
 from picamera2 import Picamera2
 
 
-class PiCameraViewer(QWidget):
+class CameraStreamApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Raspberry Pi Camera - PyQt6")
+        self.setWindowTitle("Live Camera Stream (Raspberry Pi 4)")
 
-        # Layout and image label
+        # === UI Layout ===
         self.image_label = QLabel()
         layout = QVBoxLayout()
         layout.addWidget(self.image_label)
         self.setLayout(layout)
 
-        # Initialize camera
+        # === Initialize PiCamera2 ===
         self.picam2 = Picamera2()
-        config = self.picam2.create_preview_configuration(
-            main={"format": "RGB888", "size": (640, 480)}
-        )
+        config = self.picam2.create_preview_configuration({'format': 'RGB888', 'size': (640, 480)})
         self.picam2.configure(config)
         self.picam2.start()
 
-        # Timer for periodic updates
+        # === Timer for frame update ===
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(30)  # ~30 FPS
 
     def update_frame(self):
-        # Get the latest frame
+        # Capture frame
         frame = self.picam2.capture_array()
 
-        # Manually swap Red and Blue channels
-        frame = frame[:, :, [2, 1, 0]]  # BGR to RGB manually
-
-        # Convert to QImage and display
-        height, width, channel = frame.shape
-        bytes_per_line = width * channel
-        
-        # Use QImage correctly
-        q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-        
-        # Set the pixmap to display the image
-        self.image_label.setPixmap(QPixmap.fromImage(q_image))
+        # Convert to Qt image
+        h, w, ch = frame.shape
+        bytes_per_line = ch * w
+        qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        self.image_label.setPixmap(QPixmap.fromImage(qt_image))
 
     def closeEvent(self, event):
         self.picam2.stop()
@@ -54,6 +45,6 @@ class PiCameraViewer(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    viewer = PiCameraViewer()
-    viewer.show()
+    window = CameraStreamApp()
+    window.show()
     sys.exit(app.exec())
