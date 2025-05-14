@@ -3,6 +3,8 @@ import cv2
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import QTimer
+from picamera2 import Picamera2
+
 
 # ==== Distance Estimation Constants ====
 KNOWN_FACE_WIDTH = 14.0  # cm, average adult face width
@@ -12,6 +14,7 @@ def estimate_distance(perceived_width):
     if perceived_width == 0:
         return None
     return (KNOWN_FACE_WIDTH * FOCAL_LENGTH) / perceived_width
+
 
 class FaceDetectionApp(QWidget):
     def __init__(self):
@@ -29,10 +32,11 @@ class FaceDetectionApp(QWidget):
             cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         )
 
-        # === Open camera ===
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise RuntimeError("Could not open camera. Check if it's connected and enabled.")
+        # === Initialize PiCamera2 ===
+        self.picam2 = Picamera2()
+        config = self.picam2.create_preview_configuration({'format': 'RGB888', 'size': (640, 480)})
+        self.picam2.configure(config)
+        self.picam2.start()
 
         # === Timer for frame update ===
         self.timer = QTimer()
@@ -40,13 +44,11 @@ class FaceDetectionApp(QWidget):
         self.timer.start(30)  # ~30 FPS
 
     def update_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
+        # Capture frame
+        frame = self.picam2.capture_array()
 
-        # Resize for speed
-        frame = cv2.resize(frame, (640, 480))
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Convert to grayscale for face detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
         # Detect faces
         faces = self.face_cascade.detectMultiScale(
@@ -66,15 +68,15 @@ class FaceDetectionApp(QWidget):
             cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 255), 2)
 
         # Convert to Qt image
-        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
+        h, w, ch = frame.shape
         bytes_per_line = ch * w
-        qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         self.image_label.setPixmap(QPixmap.fromImage(qt_image))
 
     def closeEvent(self, event):
-        self.cap.release()
+        self.picam2.stop()
         super().closeEvent(event)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
