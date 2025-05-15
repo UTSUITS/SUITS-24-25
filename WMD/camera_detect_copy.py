@@ -1,33 +1,40 @@
+import os
 import sys
+
+# Force Qt to use a known good platform plugin
+os.environ["QT_QPA_PLATFORM"] = "xcb"  # Try "linuxfb" if not using a desktop environment
+
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLabel, QTabWidget
 )
 from PyQt6.QtCore import Qt
 
+
 class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        self.button = QPushButton("Start Camera")
-        self.button.clicked.connect(self.toggle_camera)
-
-        self.layout.addWidget(self.button)
         self.setLayout(self.layout)
 
+        # Lazy-load camera modules
+        self.picam2 = None
+        self.qpicamera2 = None
         self.camera_initialized = False
         self.camera_running = False
-        self.qpicamera2 = None
-        self.picam2 = None
+
+        # Start/Stop button
+        self.button = QPushButton("Start Camera")
+        self.button.clicked.connect(self.toggle_camera)
+        self.layout.addWidget(self.button)
 
     def initialize_camera(self):
-        # ✅ Lazy import and widget creation AFTER QApplication
         from picamera2 import Picamera2
-        from picamera2.previews.qt import QGlPicamera2
+        from picamera2.previews.qt import QPicamera2  # software-rendered
 
         self.picam2 = Picamera2()
         self.picam2.configure(self.picam2.create_preview_configuration())
-        self.qpicamera2 = QGlPicamera2(self.picam2, width=800, height=600, keep_ar=False)
+        self.qpicamera2 = QPicamera2(self.picam2, width=800, height=600)
 
         self.layout.insertWidget(0, self.qpicamera2)
         self.camera_initialized = True
@@ -79,7 +86,7 @@ class MainApp(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)  # ✅ Constructed FIRST
+    app = QApplication(sys.argv)
     window = MainApp()
     window.show()
     sys.exit(app.exec())
