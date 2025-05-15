@@ -14,11 +14,10 @@ class CameraTab(QWidget):
         super().__init__()
         layout = QVBoxLayout()
 
-        # Initialize the Picamera2 object
+        # Initialize the Picamera2 object and preview only AFTER QApplication is constructed
         self.picam2 = Picamera2()
         self.picam2.configure(self.picam2.create_preview_configuration())
 
-        # Create the QGlPicamera2 preview widget
         self.qpicamera2 = QGlPicamera2(self.picam2, width=800, height=600, keep_ar=False)
         layout.addWidget(self.qpicamera2)
 
@@ -76,7 +75,7 @@ class MainApp(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv)  # <-- Must be called first
     window = MainApp()
     window.show()
     sys.exit(app.exec())
