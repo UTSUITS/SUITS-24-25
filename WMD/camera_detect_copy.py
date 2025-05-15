@@ -1,5 +1,5 @@
 import os
-os.environ["QT_QPA_PLATFORM"] = "xcb"  # Avoid Wayland issues on Raspberry Pi
+os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force X11 if Wayland is default
 
 import sys
 from PyQt6.QtWidgets import (
@@ -24,15 +24,19 @@ class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
         self.init_ui_done = False
+        self.picam2 = None
+        self.qpicamera2 = None
+        self.camera_running = False
 
     def setup_ui(self):
         if self.init_ui_done:
-            return  # Prevent re-initializing
+            return
 
-        layout = QVBoxLayout()
-
+        # ✅ Defer import until now, after QApplication is created
         from picamera2 import Picamera2
         from picamera2.previews.qt import QGlPicamera2
+
+        layout = QVBoxLayout()
 
         self.picam2 = Picamera2()
         self.picam2.configure(self.picam2.create_preview_configuration())
@@ -44,7 +48,6 @@ class CameraTab(QWidget):
         self.button.clicked.connect(self.toggle_camera)
         layout.addWidget(self.button)
 
-        self.camera_running = False
         self.setLayout(layout)
         self.init_ui_done = True
 
@@ -75,7 +78,6 @@ class MainApp(QWidget):
         self.tabs.addTab(self.welcome_tab, "Welcome")
         self.tabs.addTab(self.camera_tab, "Camera View")
 
-        # Connect tab change event to lazy-init the camera tab
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
         layout.addWidget(self.tabs)
@@ -87,7 +89,7 @@ class MainApp(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv)  # ✅ QApplication MUST come before anything Qt-related
     window = MainApp()
     window.show()
     sys.exit(app.exec())
