@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from camera_detect_copy import CameraTab
+
 import numpy as np
 
 from threading import Thread 
@@ -712,6 +714,14 @@ class MainWindow(QWidget):
        self.blink_timer = QTimer(self)
        self.blink_timer.timeout.connect(self.update_blinking_tabs)
        self.blink_timer.start(300)
+
+       self.tabs = QTabWidget()
+       self.camera_detect_copy = CameraTab()
+       self.tabs.addTab(self.camera_tab, "📸 Camera Feed") 
+
+       main_layout = QVBoxLayout(self)
+       main_layout.addWidget(self.tabs)
+
 
     def _advance_simulation(self):
         data = SystemStatusDisplay.read_from_redis(self)
