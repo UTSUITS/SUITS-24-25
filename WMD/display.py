@@ -229,14 +229,6 @@ class SystemStatusDisplay(QWidget):
 
         return container
 
-    # Reads from JSON file (normally overridden by live UDP in actual use)
-    def read_json(self):
-        try:
-            with open(json_path, 'r') as file:
-                return json.load(file)
-        except Exception:
-            return None
-
     # Called by timer to refresh telemetry values and update UI
     def refresh_data(self):
         data = self.read_json()
