@@ -1,12 +1,51 @@
-import os
-os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force X11 if Wayland is default
-
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLabel, QTabWidget
 )
 from PyQt6.QtCore import Qt
+
+class CameraTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        self.button = QPushButton("Start Camera")
+        self.button.clicked.connect(self.toggle_camera)
+
+        self.layout.addWidget(self.button)
+        self.setLayout(self.layout)
+
+        self.camera_initialized = False
+        self.camera_running = False
+        self.qpicamera2 = None
+        self.picam2 = None
+
+    def initialize_camera(self):
+        # ✅ Lazy import and widget creation AFTER QApplication
+        from picamera2 import Picamera2
+        from picamera2.previews.qt import QGlPicamera2
+
+        self.picam2 = Picamera2()
+        self.picam2.configure(self.picam2.create_preview_configuration())
+        self.qpicamera2 = QGlPicamera2(self.picam2, width=800, height=600, keep_ar=False)
+
+        self.layout.insertWidget(0, self.qpicamera2)
+        self.camera_initialized = True
+
+    def toggle_camera(self):
+        if not self.camera_initialized:
+            self.initialize_camera()
+
+        if not self.camera_running:
+            self.picam2.start()
+            self.qpicamera2.show()
+            self.button.setText("Stop Camera")
+        else:
+            self.picam2.stop()
+            self.qpicamera2.hide()
+            self.button.setText("Start Camera")
+
+        self.camera_running = not self.camera_running
 
 
 class WelcomeTab(QWidget):
@@ -18,49 +57,6 @@ class WelcomeTab(QWidget):
         label.setStyleSheet("font-size: 18px; padding: 20px;")
         layout.addWidget(label)
         self.setLayout(layout)
-
-
-class CameraTab(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.init_ui_done = False
-        self.picam2 = None
-        self.qpicamera2 = None
-        self.camera_running = False
-
-    def setup_ui(self):
-        if self.init_ui_done:
-            return
-
-        # ✅ Defer import until now, after QApplication is created
-        from picamera2 import Picamera2
-        from picamera2.previews.qt import QGlPicamera2
-
-        layout = QVBoxLayout()
-
-        self.picam2 = Picamera2()
-        self.picam2.configure(self.picam2.create_preview_configuration())
-
-        self.qpicamera2 = QGlPicamera2(self.picam2, width=800, height=600, keep_ar=False)
-        layout.addWidget(self.qpicamera2)
-
-        self.button = QPushButton("Start Camera")
-        self.button.clicked.connect(self.toggle_camera)
-        layout.addWidget(self.button)
-
-        self.setLayout(layout)
-        self.init_ui_done = True
-
-    def toggle_camera(self):
-        if not self.camera_running:
-            self.picam2.start()
-            self.qpicamera2.show()
-            self.button.setText("Stop Camera")
-        else:
-            self.picam2.stop()
-            self.qpicamera2.hide()
-            self.button.setText("Start Camera")
-        self.camera_running = not self.camera_running
 
 
 class MainApp(QWidget):
@@ -78,18 +74,12 @@ class MainApp(QWidget):
         self.tabs.addTab(self.welcome_tab, "Welcome")
         self.tabs.addTab(self.camera_tab, "Camera View")
 
-        self.tabs.currentChanged.connect(self.on_tab_changed)
-
         layout.addWidget(self.tabs)
         self.setLayout(layout)
 
-    def on_tab_changed(self, index):
-        if self.tabs.tabText(index) == "Camera View":
-            self.camera_tab.setup_ui()
-
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)  # ✅ QApplication MUST come before anything Qt-related
+    app = QApplication(sys.argv)  # ✅ Constructed FIRST
     window = MainApp()
     window.show()
     sys.exit(app.exec())
