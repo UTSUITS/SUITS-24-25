@@ -56,8 +56,7 @@ class CameraTab(QWidget):
 
             h, w, ch = frame.shape
             bytes_per_line = ch * w
-            frame_rgb = frame[..., ::-1]  # Swap R and B channels (RGB <-> BGR)
-            qt_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
 
             # Scale pixmap to fixed label size WITHOUT changing label size
