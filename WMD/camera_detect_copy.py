@@ -1,109 +1,83 @@
 import sys
-import os
 import time
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QStatusBar, QToolBar, QComboBox,
-    QFileDialog, QErrorMessage, QVBoxLayout, QWidget
-)
-from PyQt6.QtGui import QAction
-from PyQt6.QtMultimedia import (
-    QCamera, QCameraDevice, QMediaCaptureSession,
-    QImageCapture, QMediaDevices
-)
-from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout,
+                               QPushButton, QFileDialog, QLabel)
+from PySide6.QtMultimedia import (QCamera, QCameraDevice,
+                                  QImageCapture, QMediaCaptureSession)
+from PySide6.QtMultimediaWidgets import QVideoWidget
 
-class MainWindow(QMainWindow):
+
+class CameraApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setGeometry(100, 100, 800, 600)
-        self.setStyleSheet("background : lightgrey;")
+        self.setWindowTitle("PySide6 Camera Example")
 
-        # Get available cameras
-        self.available_cameras = QMediaDevices.videoInputs()
-        if not self.available_cameras:
-            sys.exit("No cameras found")
+        # Layout
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
 
-        self.status = QStatusBar()
-        self.status.setStyleSheet("background : white;")
-        self.setStatusBar(self.status)
-
-        self.save_path = ""
-        self.save_seq = 0
-
-        # Viewfinder
+        # Video Widget to show camera
         self.viewfinder = QVideoWidget()
-        self.setCentralWidget(self.viewfinder)
+        self.layout.addWidget(self.viewfinder)
 
+        # Buttons
+        self.capture_btn = QPushButton("Capture Photo")
+        self.layout.addWidget(self.capture_btn)
+
+        self.change_folder_btn = QPushButton("Change Save Folder")
+        self.layout.addWidget(self.change_folder_btn)
+
+        self.status_label = QLabel("")
+        self.layout.addWidget(self.status_label)
+
+        # Default save folder
+        self.save_folder = "."
+
+        # Get default camera device
+        devices = QCameraDevice.availableDevices()
+        if not devices:
+            self.status_label.setText("No camera device found!")
+            return
+        self.camera_device = devices[0]
+
+        # Camera and capture session setup
+        self.camera = QCamera(self.camera_device)
         self.capture_session = QMediaCaptureSession()
-        self.capture_session.setVideoOutput(self.viewfinder)
-
-        self.select_camera(0)
-
-        # Toolbar
-        toolbar = QToolBar("Camera Tool Bar")
-        self.addToolBar(toolbar)
-
-        # Click photo action
-        click_action = QAction("Click photo", self)
-        click_action.setStatusTip("Capture picture")
-        click_action.setToolTip("Capture picture")
-        click_action.triggered.connect(self.click_photo)
-        toolbar.addAction(click_action)
-
-        # Change folder action
-        change_folder_action = QAction("Change save location", self)
-        change_folder_action.setStatusTip("Change folder where picture will be saved")
-        change_folder_action.setToolTip("Change save location")
-        change_folder_action.triggered.connect(self.change_folder)
-        toolbar.addAction(change_folder_action)
-
-        # Camera selector
-        self.camera_selector = QComboBox()
-        self.camera_selector.setStatusTip("Choose camera")
-        self.camera_selector.setToolTip("Select Camera")
-        self.camera_selector.addItems([device.description() for device in self.available_cameras])
-        self.camera_selector.currentIndexChanged.connect(self.select_camera)
-        toolbar.addWidget(self.camera_selector)
-
-        toolbar.setStyleSheet("background : white;")
-        self.setWindowTitle("PyQt6 Cam")
-        self.show()
-
-    def select_camera(self, index):
-        self.camera = QCamera(self.available_cameras[index])
         self.capture_session.setCamera(self.camera)
 
-        self.image_capture = QImageCapture(self.camera)
+        self.viewfinder.show()
+        self.capture_session.setVideoOutput(self.viewfinder)
+
+        # Image capture
+        self.image_capture = QImageCapture()
         self.capture_session.setImageCapture(self.image_capture)
 
+        # Connect signals
+        self.capture_btn.clicked.connect(self.capture_image)
+        self.image_capture.imageCaptured.connect(self.on_image_captured)
+        self.change_folder_btn.clicked.connect(self.change_folder)
+
+        # Start the camera
         self.camera.start()
 
-        self.current_camera_name = self.available_cameras[index].description()
-        self.save_seq = 0
+    def capture_image(self):
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = f"{self.save_folder}/photo_{timestamp}.jpg"
+        self.image_capture.captureToFile(filename)
+        self.status_label.setText(f"Capturing photo to {filename}")
 
-        self.image_capture.imageCaptured.connect(
-            lambda id, img: self.status.showMessage(f"Image captured: {self.save_seq}")
-        )
-
-    def click_photo(self):
-        timestamp = time.strftime("%d-%b-%Y-%H_%M_%S")
-        filename = f"{self.current_camera_name}-{self.save_seq:04d}-{timestamp}.jpg"
-        filepath = os.path.join(self.save_path, filename)
-
-        self.image_capture.captureToFile(filepath)
-        self.save_seq += 1
+    def on_image_captured(self, id, preview):
+        self.status_label.setText(f"Photo captured with id {id}")
 
     def change_folder(self):
-        path = QFileDialog.getExistingDirectory(self, "Picture Location", "")
+        path = QFileDialog.getExistingDirectory(self, "Select Save Folder", self.save_folder)
         if path:
-            self.save_path = path
-            self.save_seq = 0
-
-    def alert(self, msg):
-        error = QErrorMessage(self)
-        error.showMessage(msg)
+            self.save_folder = path
+            self.status_label.setText(f"Save folder changed to: {self.save_folder}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = CameraApp()
+    window.resize(800, 600)
+    window.show()
     sys.exit(app.exec())
