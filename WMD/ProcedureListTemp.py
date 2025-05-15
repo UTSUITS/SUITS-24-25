@@ -12,7 +12,7 @@ class TaskTracker(QWidget):
         super().__init__()
 
         self.setWindowTitle("EVA Procedures Tracker")
-        self.setFixedSize(1100, 600)
+        self.setFixedSize(1100, 600) 
 
         dark_palette = QPalette()
         dark_palette.setColor(QPalette.ColorRole.Window, QColor("#121212"))

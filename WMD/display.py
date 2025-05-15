@@ -6,9 +6,10 @@ import json
 import time
 from shared_data import shared_results, results_lock 
 from map import MapLabel 
+from ProcedureListTemp import TaskTracker 
 from PyQt6.QtWidgets import (QSizePolicy,QApplication, QWidget, QLabel, QProgressBar, QVBoxLayout, QTextEdit, QHBoxLayout, QPushButton, QTabWidget, QFrame, QGraphicsDropShadowEffect)
-from PyQt6.QtWidgets import QProgressBar
-from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen
+from PyQt6.QtWidgets import QProgressBar 
+from PyQt6.QtGui import QFont, QColor, QPainter, QBrush 
 from PyQt6.QtCore import Qt, QTimer 
 from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
@@ -16,7 +17,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
 
-from threading import Thread, Lock
+from threading import Thread 
 
 rd=redis.Redis(host='localhost', port=6379,db=0)
 
@@ -649,6 +650,10 @@ class MainWindow(QWidget):
                     (57, "EVA2 Power"), (58, "EVA2 Oxy"), (59, "EVA2 Water Supply"), (60, "EVA2 Water Waste"),
                     (61, "Oxy Vent"), (62, "Depress Pump")]) 
        ]
+
+       # Instantiate the TaskTracker widget and add it as a new tab
+       self.task_tracker_tab = TaskTracker()
+       self.tabs.addTab(self.task_tracker_tab, "EVA Procedures") 
 
        # Loop through all tab definitions and create appropriate tabs
        for name, keys, *use_leds in tab_definitions:

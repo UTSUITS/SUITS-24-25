@@ -3,7 +3,6 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton
 from picamera2.previews.qt import QGlPicamera2
 from picamera2 import Picamera2
 
-
 class CameraApp(QWidget):
     def __init__(self):
         super().__init__()
