@@ -1,9 +1,13 @@
+import os
+os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force Qt to use X11 platform plugin
+
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLabel, QTabWidget
 )
 from PyQt6.QtCore import Qt
+
 
 class CameraTab(QWidget):
     def __init__(self):
@@ -20,10 +24,12 @@ class CameraTab(QWidget):
         self.qpicamera2 = QGlPicamera2(self.picam2, width=800, height=600, keep_ar=False)
         layout.addWidget(self.qpicamera2)
 
+        # Create a button to start/stop the camera stream
         self.button = QPushButton("Start Camera")
         self.button.clicked.connect(self.toggle_camera)
         layout.addWidget(self.button)
 
+        # Flag to track whether the camera is running
         self.camera_running = False
 
         self.setLayout(layout)
@@ -72,7 +78,7 @@ class MainApp(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)  # CREATE QApplication here FIRST
-    window = MainApp()            # Create widgets AFTER QApplication
+    app = QApplication(sys.argv)  # Create QApplication FIRST
+    window = MainApp()            # Then create widgets
     window.show()
     sys.exit(app.exec())
