@@ -1292,6 +1292,13 @@ class MainWindow(QWidget):
 
         for i in range(self.tabs.count()):
             tab_widget = self.tabs.widget(i)
+            tab_label = self.tabs.tabText(i)
+
+            # Skip EVA1 TELEMETRY tab from blinking
+            if tab_label in ["EVA1 DCU","EVA2 DCU", "UIA","EVA States"]: # Change if you need some blinking red (Richard G) 
+                tab_bar.setTabTextColor(i, QColor("white"))
+                continue
+
             has_red = False
 
             # Look for nested QTabWidget inside the tab
