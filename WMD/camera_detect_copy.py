@@ -13,11 +13,8 @@ class CameraTab(QWidget):
 
         self.label = QLabel("Camera feed will appear here")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Fix the size of the label so it does not expand infinitely
         self.label.setFixedSize(640, 480)
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-
         self.layout.addWidget(self.label)
 
         self.button = QPushButton("Start Camera")
@@ -36,7 +33,6 @@ class CameraTab(QWidget):
         if not self.camera_running:
             self.picam2 = Picamera2()
             config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (640, 480)})
-            image = cv2.cvtColor( image, cv2.COLOR_BGR2RGB )
             self.picam2.configure(config)
             self.picam2.start()
             self.timer.start(60)  # roughly 30 FPS
@@ -53,17 +49,17 @@ class CameraTab(QWidget):
     def update_frame(self):
         if self.picam2:
             frame = self.picam2.capture_array()
-            # frame is RGB888 numpy array, size 640x480x3
 
-            h, w, ch = frame.shape
+            # Fix color if needed (swap BGR to RGB)
+            frame_rgb = frame[..., ::-1]  # Convert BGR to RGB if you're blue
+
+            h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
-            qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            qt_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
 
-            # Scale pixmap to fixed label size WITHOUT changing label size
             pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.label.setPixmap(pix)
-
 
 class WelcomeTab(QWidget):
     def __init__(self):
