@@ -717,7 +717,7 @@ class MainWindow(QWidget):
 
        self.tabs = QTabWidget()
        self.camera_detect_copy = CameraTab()
-       self.tabs.addTab(self.camera_tab, "📸 Camera Feed") 
+       self.tabs.addTab(self.camera_detect_copy, "📸 Camera Feed") 
 
        main_layout = QVBoxLayout(self)
        main_layout.addWidget(self.tabs)
