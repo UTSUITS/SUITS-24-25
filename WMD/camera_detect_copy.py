@@ -50,16 +50,17 @@ class CameraTab(QWidget):
         if self.picam2:
             frame = self.picam2.capture_array()
 
-            # Fix color if needed (swap BGR to RGB)
-            frame_rgb = frame[..., ::-1]  # Convert BGR to RGB if you're blue
+            # Convert BGR to RGB if needed
+            frame_rgb = frame[..., ::-1]
 
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
-            qt_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
 
             pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.label.setPixmap(pix)
+
 
 class WelcomeTab(QWidget):
     def __init__(self):
