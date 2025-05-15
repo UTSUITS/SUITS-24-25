@@ -8,8 +8,12 @@ from PyQt6.QtCore import Qt
 from picamera2.previews.qt import QGlPicamera2
 from picamera2 import Picamera2
 
+<<<<<<< HEAD
 
 class CameraTab(QWidget):
+=======
+class CameraApp(QWidget):
+>>>>>>> 9d3d738c04fbd89663e33bb7a1827a23857406d7
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
