@@ -1,10 +1,9 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QPushButton
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QPushButton, QSizePolicy
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
 
 from picamera2 import Picamera2
-import cv2
 import numpy as np
 
 class CameraTab(QWidget):
@@ -14,6 +13,11 @@ class CameraTab(QWidget):
 
         self.label = QLabel("Camera feed will appear here")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Fix the size of the label so it does not expand infinitely
+        self.label.setFixedSize(640, 480)
+        self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
         self.layout.addWidget(self.label)
 
         self.button = QPushButton("Start Camera")
@@ -48,12 +52,17 @@ class CameraTab(QWidget):
     def update_frame(self):
         if self.picam2:
             frame = self.picam2.capture_array()
-            # frame is already RGB888 numpy array
+            # frame is RGB888 numpy array, size 640x480x3
+
             h, w, ch = frame.shape
             bytes_per_line = ch * w
             qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
-            self.label.setPixmap(pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio))
+
+            # Scale pixmap to fixed label size WITHOUT changing label size
+            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.label.setPixmap(pix)
+
 
 class WelcomeTab(QWidget):
     def __init__(self):
