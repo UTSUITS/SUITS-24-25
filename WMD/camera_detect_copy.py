@@ -36,9 +36,10 @@ class CameraTab(QWidget):
         if not self.camera_running:
             self.picam2 = Picamera2()
             config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (640, 480)})
+            image = cv2.cvtColor( image, cv2.COLOR_BGR2RGB )
             self.picam2.configure(config)
             self.picam2.start()
-            self.timer.start(30)  # roughly 30 FPS
+            self.timer.start(60)  # roughly 30 FPS
             self.button.setText("Stop Camera")
         else:
             self.timer.stop()
