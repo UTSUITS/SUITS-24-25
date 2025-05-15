@@ -5,16 +5,16 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from picamera2.previews.qt import QGlPicamera2
-from picamera2 import Picamera2
-
 
 class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout()
 
-        # Initialize the Picamera2 object and preview only AFTER QApplication is constructed
+        # ✅ Lazy import AFTER QApplication is initialized
+        from picamera2 import Picamera2
+        from picamera2.previews.qt import QGlPicamera2
+
         self.picam2 = Picamera2()
         self.picam2.configure(self.picam2.create_preview_configuration())
 
@@ -75,7 +75,7 @@ class MainApp(QWidget):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)  # <-- Must be called first
+    app = QApplication(sys.argv)  # MUST come before any Qt widgets
     window = MainApp()
     window.show()
     sys.exit(app.exec())
