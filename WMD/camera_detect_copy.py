@@ -1,92 +1,105 @@
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QStatusBar, QToolBar, QAction, QComboBox, QFileDialog, QErrorMessage
+)
+from PyQt6.QtMultimedia import QCameraDevice, QCamera, QMediaCaptureSession, QImageCapture
+from PyQt6.QtMultimediaWidgets import QVideoWidget
+from PyQt6.QtCore import Qt
 import os
 import sys
-
-# Force Qt to use a known good platform plugin
-os.environ["QT_QPA_PLATFORM"] = "xcb"  # Try "linuxfb" if not using a desktop environment
-
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton,
-    QLabel, QTabWidget
-)
-from PyQt6.QtCore import Qt
+import time
 
 
-class CameraTab(QWidget):
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
 
-        # Lazy-load camera modules
-        self.picam2 = None
-        self.qpicamera2 = None
-        self.camera_initialized = False
-        self.camera_running = False
+        self.setGeometry(100, 100, 800, 600)
+        self.setStyleSheet("background : lightgrey;")
 
-        # Start/Stop button
-        self.button = QPushButton("Start Camera")
-        self.button.clicked.connect(self.toggle_camera)
-        self.layout.addWidget(self.button)
+        # Get available cameras
+        self.camera_devices = QMediaCaptureSession().availableCameras()
 
-    def initialize_camera(self):
-        from picamera2 import Picamera2
-        from picamera2.previews.qt import QPicamera2  # software-rendered
+        if not self.camera_devices:
+            QErrorMessage(self).showMessage("No cameras found.")
+            sys.exit()
 
-        self.picam2 = Picamera2()
-        self.picam2.configure(self.picam2.create_preview_configuration())
-        self.qpicamera2 = QPicamera2(self.picam2, width=800, height=600)
+        # Status bar
+        self.status = QStatusBar()
+        self.status.setStyleSheet("background : white;")
+        self.setStatusBar(self.status)
 
-        self.layout.insertWidget(0, self.qpicamera2)
-        self.camera_initialized = True
+        # Save path
+        self.save_path = os.getcwd()
 
-    def toggle_camera(self):
-        if not self.camera_initialized:
-            self.initialize_camera()
+        # Create camera viewfinder
+        self.viewfinder = QVideoWidget()
+        self.setCentralWidget(self.viewfinder)
 
-        if not self.camera_running:
-            self.picam2.start()
-            self.qpicamera2.show()
-            self.button.setText("Stop Camera")
-        else:
-            self.picam2.stop()
-            self.qpicamera2.hide()
-            self.button.setText("Start Camera")
+        # Create toolbar
+        toolbar = QToolBar("Camera Toolbar")
+        toolbar.setStyleSheet("background : white;")
+        self.addToolBar(toolbar)
 
-        self.camera_running = not self.camera_running
+        # Click photo action
+        click_action = QAction("Click photo", self)
+        click_action.setStatusTip("This will capture a picture")
+        click_action.triggered.connect(self.click_photo)
+        toolbar.addAction(click_action)
+
+        # Change save location action
+        change_folder_action = QAction("Change save location", self)
+        change_folder_action.setStatusTip("Change the folder where pictures will be saved")
+        change_folder_action.triggered.connect(self.change_folder)
+        toolbar.addAction(change_folder_action)
+
+        # Camera selector combo box
+        self.camera_selector = QComboBox()
+        self.camera_selector.setStatusTip("Choose camera to take pictures")
+        self.camera_selector.addItems([device.description() for device in self.camera_devices])
+        self.camera_selector.currentIndexChanged.connect(self.select_camera)
+        toolbar.addWidget(self.camera_selector)
+
+        # Set default camera
+        self.select_camera(0)
+
+        self.setWindowTitle("PyQt6 Cam")
+        self.show()
+
+    def select_camera(self, index):
+        self.capture_session = QMediaCaptureSession()
+
+        self.camera = QCamera(self.camera_devices[index])
+        self.capture_session.setCamera(self.camera)
+
+        self.capture_session.setVideoOutput(self.viewfinder)
+
+        self.image_capture = QImageCapture(self.camera)
+        self.capture_session.setImageCapture(self.image_capture)
+
+        self.image_capture.imageCaptured.connect(
+            lambda id, image: self.status.showMessage(f"Image captured: {self.save_seq}")
+        )
+
+        self.camera.start()
+
+        self.current_camera_name = self.camera_devices[index].description()
+        self.save_seq = 0
+
+    def click_photo(self):
+        timestamp = time.strftime("%d-%b-%Y-%H_%M_%S")
+        filename = f"{self.current_camera_name}-{self.save_seq:04d}-{timestamp}.jpg"
+        full_path = os.path.join(self.save_path, filename)
+        self.image_capture.captureToFile(full_path)
+        self.save_seq += 1
+
+    def change_folder(self):
+        path = QFileDialog.getExistingDirectory(self, "Picture Location", "")
+        if path:
+            self.save_path = path
+            self.save_seq = 0
 
 
-class WelcomeTab(QWidget):
-    def __init__(self):
-        super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("👋 Welcome to the NASA SUITS Wrist-Mounted UI!\nSelect the camera tab to begin your EVA.")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("font-size: 18px; padding: 20px;")
-        layout.addWidget(label)
-        self.setLayout(layout)
-
-
-class MainApp(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("NASA SUITS Camera Interface")
-        self.resize(850, 700)
-
-        layout = QVBoxLayout()
-        self.tabs = QTabWidget()
-
-        self.welcome_tab = WelcomeTab()
-        self.camera_tab = CameraTab()
-
-        self.tabs.addTab(self.welcome_tab, "Welcome")
-        self.tabs.addTab(self.camera_tab, "Camera View")
-
-        layout.addWidget(self.tabs)
-        self.setLayout(layout)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = MainApp()
-    window.show()
+    window = MainWindow()
     sys.exit(app.exec())
