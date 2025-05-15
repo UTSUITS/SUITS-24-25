@@ -150,7 +150,7 @@ class TaskTracker(QWidget):
             }
             QListWidget::item:selected {
                 background-color: #3A3A3A;
-                color: #00ff00;
+                color: #ffaa00;
             }
         """)
         self.tab_list_widget.setFixedHeight(250)
@@ -305,22 +305,30 @@ class TaskTracker(QWidget):
             self.tab_list_widget.setCurrentRow(index)
 
     def update_tab_checklist(self):
-    # Update checkmarks in the tab list widget
+        current_index = self.tabs.currentIndex()
         for i in range(self.tab_list_widget.count()):
             full_text = self.tab_list_widget.item(i).text()
             tab_name = full_text[2:].strip()  # Remove the prefix symbol + space
             
             total_tasks = len(self.task_groups[tab_name])
             completed = sum(1 for done in self.task_completion_states[i] if done)
+
             if completed == total_tasks and total_tasks > 0:
+                # Done - green checkmark
                 checkmark = "✔"
-                color = QColor("#00ff00")
+                color = QColor("#00ff00")  # green
             elif completed > 0:
+                # In progress - yellow bullet
                 checkmark = "●"
-                color = QColor("#ffaa00")
+                color = QColor("#ffaa00")  # yellow
             else:
+                # Not started - no mark, white color
                 checkmark = " "
                 color = QColor("white")
+
+            # If this is the current tab, override color to blue
+            if i == current_index:
+                color = QColor("#3399ff")  # blue
 
             self.tab_list_widget.item(i).setText(f"{checkmark} {tab_name}")
             self.tab_list_widget.item(i).setForeground(QBrush(color))
