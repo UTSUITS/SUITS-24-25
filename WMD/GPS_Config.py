@@ -1,25 +1,60 @@
+import serial
+import pynmea2
 from qmc5883l import QMC5883L
 import smbus
+import time
 
-def test_qmc5883l_init():
+def read_gps(port):
     try:
-        compass = QMC5883L()  # try no arguments
-        print("Compass initialized with no arguments")
-    except TypeError as e:
-        print(f"No-arg initialization failed: {e}")
+        line = port.readline().decode('utf-8', errors='ignore').strip()
+        if line.startswith('$GNGGA') or line.startswith('$GPGGA'):
+            msg = pynmea2.parse(line)
+            if msg.latitude and msg.longitude:
+                return (msg.latitude, msg.longitude)
+    except pynmea2.ParseError:
+        pass
+    return (None, None)
 
+def read_compass(sensor):
     try:
-        compass = QMC5883L(1)  # try bus number
-        print("Compass initialized with bus number (1)")
-    except TypeError as e:
-        print(f"Bus number initialization failed: {e}")
+        heading = sensor.get_bearing()
+        return heading
+    except Exception as e:
+        print(f"Compass error: {e}")
+        return None
 
+def main():
+    print("Initializing...")
     try:
+        gps = serial.Serial('/dev/serial0', baudrate=38400, timeout=1)
         bus = smbus.SMBus(1)
-        compass = QMC5883L(bus)  # try bus object
-        print("Compass initialized with bus object (smbus.SMBus(1))")
-    except TypeError as e:
-        print(f"Bus object initialization failed: {e}")
+        compass = QMC5883L(bus)
 
-if __name__ == "__main__":
-    test_qmc5883l_init()
+        print("GPS + Compass active. Press Ctrl+C to exit.")
+        while True:
+            lat, lon = read_gps(gps)
+            heading = read_compass(compass)
+
+            if lat and lon:
+                print(f"📡 GPS: Latitude={lat:.6f}, Longitude={lon:.6f}")
+            else:
+                print("📡 GPS: Waiting for fix...")
+
+            if heading is not None:
+                print(f"🧭 Compass Heading: {heading:.2f}°")
+            else:
+                print("🧭 Compass: No data")
+
+            print("-" * 40)
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        print("Exiting.")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+    finally:
+        if 'gps' in locals() and gps.is_open:
+            gps.close()
+
+if __name__ == '__main__':
+    main()
