@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
 class GPSReader:
-    def __init__(self, port="/dev/ttys0", baudrate=9600):
+    def __init__(self, port="/dev/serial0", baudrate=9600):
         self.serial_port = serial.Serial(port, baudrate=baudrate, timeout=1)
         self.last_lat = None
         self.last_lon = None
