@@ -1,74 +1,72 @@
 import sys
-import math
+import serial
+import pynmea2
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
-# Dummy sensor class for testing, replace with your actual sensor
-class QMC5883L:
-    def __init__(self, i2c=None, offset=50.0):
-        pass
-    def read_scaled(self):
-        # Return fake data: x, y, z in gauss, temp in °C
-        import time
-        t = time.time()
-        x = math.cos(t)
-        y = math.sin(t)
-        z = 0.1
-        temp = 25.0
-        return (x, y, z, temp)
+class GPSReader:
+    def __init__(self, port="/dev/serial0", baudrate=9600):
+        self.serial_port = serial.Serial(port, baudrate=baudrate, timeout=1)
+        self.last_lat = None
+        self.last_lon = None
+        self.last_speed = 0.0
+        self.last_heading = 0.0
 
-class CompassApp(QWidget):
-    def __init__(self, sensor):
+    def read(self):
+        while self.serial_port.in_waiting:
+            line = self.serial_port.readline().decode(errors='ignore').strip()
+            if line.startswith('$GPRMC') or line.startswith('$GNRMC'):
+                try:
+                    msg = pynmea2.parse(line)
+                    if msg.status == 'A':  # Data Active
+                        self.last_lat = msg.latitude
+                        self.last_lon = msg.longitude
+                        self.last_speed = float(msg.spd_over_grnd) * 1.852  # knots to km/h
+                        self.last_heading = float(msg.true_course)
+                except pynmea2.nmea.ParseError:
+                    pass
+        return self.last_lat, self.last_lon, self.last_speed, self.last_heading
+
+class GPSApp(QWidget):
+    def __init__(self, gps_reader):
         super().__init__()
-        self.sensor = sensor
-        self.setWindowTitle("Simple QMC5883L Compass")
-        self.resize(250, 150)
+        self.gps = gps_reader
+        self.setWindowTitle("GPS Viewer")
+        self.resize(300, 150)
 
-        self.label_xyz = QLabel("X: 0.00  Y: 0.00  Z: 0.00")
-        self.label_temp = QLabel("Temp: 0.0 °C")
+        self.label_position = QLabel("Lat: 0.0000, Lon: 0.0000")
+        self.label_speed = QLabel("Speed: 0.0 km/h")
         self.label_heading = QLabel("Heading: 0.0°")
 
         font = QFont()
         font.setPointSize(12)
-        self.label_xyz.setFont(font)
-        self.label_temp.setFont(font)
-        self.label_heading.setFont(font)
-
-        self.label_xyz.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label_temp.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label_heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for label in [self.label_position, self.label_speed, self.label_heading]:
+            label.setFont(font)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout = QVBoxLayout()
-        layout.addWidget(self.label_xyz)
-        layout.addWidget(self.label_temp)
+        layout.addWidget(self.label_position)
+        layout.addWidget(self.label_speed)
         layout.addWidget(self.label_heading)
         self.setLayout(layout)
 
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_readings)
-        self.timer.start(500)
+        self.timer.timeout.connect(self.update_data)
+        self.timer.start(1000)
 
-    def update_readings(self):
-        x, y, z, temp = self.sensor.read_scaled()
-
-        self.label_xyz.setText(f"X: {x:.2f}  Y: {y:.2f}  Z: {z:.2f}")
-        self.label_temp.setText(f"Temp: {temp:.1f} °C")
-
-        heading_rad = math.atan2(y, x)
-        heading_deg = math.degrees(heading_rad)
-        if heading_deg < 0:
-            heading_deg += 360
-        self.label_heading.setText(f"Heading: {heading_deg:.1f}°")
+    def update_data(self):
+        lat, lon, speed, heading = self.gps.read()
+        if lat is not None and lon is not None:
+            self.label_position.setText(f"Lat: {lat:.5f}, Lon: {lon:.5f}")
+            self.label_speed.setText(f"Speed: {speed:.1f} km/h")
+            self.label_heading.setText(f"Heading: {heading:.1f}°")
 
 def main():
     app = QApplication(sys.argv)
-
-    sensor = QMC5883L()  # Replace with actual sensor instance
-
-    window = CompassApp(sensor)
+    gps_reader = GPSReader()
+    window = GPSApp(gps_reader)
     window.show()
-
     sys.exit(app.exec())
 
 if __name__ == "__main__":
