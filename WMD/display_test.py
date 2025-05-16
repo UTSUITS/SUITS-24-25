@@ -201,6 +201,7 @@ class SystemStatusDisplay(QWidget):
         for row in row_layouts:
             self.layout.addLayout(row)
 
+        # # Chat-Box initialization 
         # self.chat_box = QTextEdit()
         # self.chat_box.setFixedHeight(260)
         # self.chat_box.setReadOnly(True)
@@ -262,7 +263,7 @@ class SystemStatusDisplay(QWidget):
             elif value == 0:
                 widget.set_color("green")
             #     self.chat_box.append(f"[{timestamp}] {label} :- OK")
-            # else:
+            else:
                 widget.set_color("gray")
                 # self.chat_box.append(f"[{timestamp}] {label} Unknown State")
         else:
@@ -303,7 +304,7 @@ class SystemStatusDisplay(QWidget):
       #          self.update_json_key(key, 0)
                 break
 
-    # Appends message to chatbox with red highlight if error
+    # # Appends message to chatbox with red highlight if error
     # def log_to_chat(self, message):
     #     # Max scroll value (at bottom)
     #     max_scroll = self.chat_box.verticalScrollBar().maximum()
@@ -717,12 +718,6 @@ class MainWindow(QWidget):
        self.blink_timer = QTimer(self)
        self.blink_timer.timeout.connect(self.update_blinking_tabs)
        self.blink_timer.start(300)
-
-       self.tabs = QTabWidget()
-       self.camera_detect_copy = CameraTab()
-       self.tabs.addTab(self.camera_detect_copy, "📸 Camera Feed") 
-
-
 
     def _advance_simulation(self):
         data = SystemStatusDisplay.read_from_redis(self)

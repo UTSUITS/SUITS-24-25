@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from camera_detect_copy import CameraTab
+
 import numpy as np
 
 from threading import Thread 
@@ -199,14 +201,15 @@ class SystemStatusDisplay(QWidget):
         for row in row_layouts:
             self.layout.addLayout(row)
 
-        self.chat_box = QTextEdit()
-        self.chat_box.setFixedHeight(260)
-        self.chat_box.setReadOnly(True)
-        self.chat_box.setStyleSheet(
-            "background-color: rgba(0, 0, 0, 0.8); color: white; "
-            "border-radius: 10px; padding: 10px; border: 2px solid #333;"
-        )
-        self.layout.addWidget(self.chat_box)
+        # # Chat-Box initialization 
+        # self.chat_box = QTextEdit()
+        # self.chat_box.setFixedHeight(260)
+        # self.chat_box.setReadOnly(True)
+        # self.chat_box.setStyleSheet(
+        #     "background-color: rgba(0, 0, 0, 0.8); color: white; "
+        #     "border-radius: 10px; padding: 10px; border: 2px solid #333;"
+        # )
+        # self.layout.addWidget(self.chat_box)
 
         # Timer for polling data and refreshing display
         self.timer = QTimer(self)
@@ -249,7 +252,7 @@ class SystemStatusDisplay(QWidget):
         if isinstance(widget, GradientSlider):
             widget.set_actual_value(float(value))
             self.slider_states[key] = (int(value) == 0)
-            self.chat_box.append(f"[{timestamp}] {label}: {value}")
+            # self.chat_box.append(f"[{timestamp}] {label}: {value}")
             return
 
         if self.use_leds:
@@ -259,19 +262,19 @@ class SystemStatusDisplay(QWidget):
              #   self.chat_box.append(f"[{timestamp}] {label} Error Detected!")
             elif value == 0:
                 widget.set_color("green")
-                self.chat_box.append(f"[{timestamp}] {label} :- OK")
+            #     self.chat_box.append(f"[{timestamp}] {label} :- OK")
             else:
                 widget.set_color("gray")
-                self.chat_box.append(f"[{timestamp}] {label} Unknown State")
+                # self.chat_box.append(f"[{timestamp}] {label} Unknown State")
         else:
             # Always follow telemetry data for non-LEDs
             if value == 1:
                 widget.set_color("green")
-                self.chat_box.append(f"[{timestamp}] -> {label} Sensor On ✅")
+                # self.chat_box.append(f"[{timestamp}] -> {label} Sensor On ✅")
                 self.manual_resets[key] = True
             elif value == 0:
                 widget.set_color("red")
-                self.log_to_chat(f"[{timestamp}] -> {label} Sensor Off ⛔")
+                # self.log_to_chat(f"[{timestamp}] -> {label} Sensor Off ⛔")
                # self.chat_box.append(f"[{timestamp}] -> {label} Sensor Off ⛔")
                 self.manual_resets[key] = False
 
@@ -295,31 +298,31 @@ class SystemStatusDisplay(QWidget):
             if w == widget:
                 label = [label for k, label in self.keys_labels if k == key][0]
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-                self.chat_box.append(f"[{timestamp}] {label}: State Cleared!")
+                # self.chat_box.append(f"[{timestamp}] {label}: State Cleared!")
                 self.error_states[key] = 0
                 self.manual_resets[key] = True
       #          self.update_json_key(key, 0)
                 break
 
-    # Appends message to chatbox with red highlight if error
-    def log_to_chat(self, message):
-        # Max scroll value (at bottom)
-        max_scroll = self.chat_box.verticalScrollBar().maximum()
-        current_scroll = self.chat_box.verticalScrollBar().value()
+    # # Appends message to chatbox with red highlight if error
+    # def log_to_chat(self, message):
+    #     # Max scroll value (at bottom)
+    #     max_scroll = self.chat_box.verticalScrollBar().maximum()
+    #     current_scroll = self.chat_box.verticalScrollBar().value()
 
-        if current_scroll >= max_scroll:
-            # User is at bottom — auto-clear if too long
-            if self.chat_box.document().blockCount() > 12:  # adjust threshold as needed
-                self.chat_box.clear()
+    #     if current_scroll >= max_scroll:
+    #         # User is at bottom — auto-clear if too long
+    #         if self.chat_box.document().blockCount() > 12:  # adjust threshold as needed
+    #             self.chat_box.clear()
 
-        ## Modified code 20250409
-        if "Off" in message or "⛔" in message:
-            self.chat_box.setTextColor(QColor("red"))
-        else:
-            self.chat_box.setTextColor(QColor("white"))
+    #     ## Modified code 20250409
+    #     if "Off" in message or "⛔" in message:
+    #         self.chat_box.setTextColor(QColor("red"))
+    #     else:
+    #         self.chat_box.setTextColor(QColor("white"))
 
-        self.chat_box.append(message)
-        self.chat_box.setTextColor(QColor("white"))  # Reset to default
+    #     self.chat_box.append(message)
+    #     self.chat_box.setTextColor(QColor("white"))  # Reset to default
 
 
 class GradientSlider(QWidget):
@@ -705,6 +708,9 @@ class MainWindow(QWidget):
        rock_yard_map_tab = self.create_rock_yard_map_tab()
        self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
        self.tab_labels.append("Rock Yard Map")
+
+       self.camera_tab = CameraTab()
+       self.tabs.addTab(self.camera_tab, "Camera")
 
        self.layout.addWidget(self.tabs)
 
