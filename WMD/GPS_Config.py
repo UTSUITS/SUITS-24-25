@@ -1,7 +1,7 @@
 import serial
 import pynmea2
-from qmc5883l import QMC5883L
 import smbus
+from qmc5883l import QMC5883L
 import time
 
 def read_gps(port):
@@ -27,7 +27,8 @@ def main():
     print("Initializing...")
     try:
         gps = serial.Serial('/dev/serial0', baudrate=38400, timeout=1)
-        bus = smbus.SMBus(1)
+
+        bus = smbus.SMBus(1)  # Raspberry Pi I2C bus 1
         compass = QMC5883L(bus)
 
         print("GPS + Compass active. Press Ctrl+C to exit.")
