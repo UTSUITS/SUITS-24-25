@@ -1,50 +1,55 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
-from PyQt6.QtCore import QTimer
-import gpsd
+import os
+from gps import *
+import time
+import threading
 
-class GPSWidget(QWidget):
+gpsd = None  # setting the global variable
+
+os.system('clear')  # clear the terminal (optional)
+
+class GpsPoller(threading.Thread):
     def __init__(self):
-        super().__init__()
-        self.setWindowTitle("GPS Data")
-        self.setGeometry(100, 100, 300, 150)
+        threading.Thread.__init__(self)
+        global gpsd  # bring it in scope
+        gpsd = gps(mode=WATCH_ENABLE)  # starting the stream of info
+        self.current_value = None
+        self.running = True  # setting the thread running to true
 
-        gpsd.connect()  # Connect to local GPSD
+    def run(self):
+        global gpsd
+        while self.running:
+            gpsd.next()  # this will loop and grab EACH set of gpsd info to clear the buffer
 
-        self.label = QLabel("Waiting for GPS fix...", self)
-        layout = QVBoxLayout()
-        layout.addWidget(self.label)
-        self.setLayout(layout)
+if __name__ == '__main__':
+    gpsp = GpsPoller()  # create the thread
+    try:
+        gpsp.start()  # start it up
+        while True:
+            # It may take a second or two to get good data
+            os.system('clear')
 
-        # Timer to update every 1 second
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_data)
-        self.timer.start(1000)
+            print()
+            print(' GPS reading')
+            print('---------------------------')
+            print('latitude  ', gpsd.fix.latitude)
+            print('longitude ', gpsd.fix.longitude)
+            print('time utc  ', gpsd.utc, '+', gpsd.fix.time)
+            print('altitude (m)', gpsd.fix.altitude)
+            print('eps      ', gpsd.fix.eps)
+            print('epx      ', gpsd.fix.epx)
+            print('epv      ', gpsd.fix.epv)
+            print('ept      ', gpsd.fix.ept)
+            print('speed (m/s)', gpsd.fix.speed)
+            print('climb    ', gpsd.fix.climb)
+            print('track    ', gpsd.fix.track)
+            print('mode     ', gpsd.fix.mode)
+            print()
+            print('sats     ', gpsd.satellites)
 
-    def update_data(self):
-        try:
-            packet = gpsd.get_current()
-            if packet.mode >= 2:  # 2D fix or better
-                lat = packet.lat
-                lon = packet.lon
-                alt = packet.alt if packet.mode == 3 else "N/A"
-                sats = packet.sats_used if hasattr(packet, 'sats_used') else "?"
-                text = (
-                    f"Latitude:  {lat:.6f}\n"
-                    f"Longitude: {lon:.6f}\n"
-                    f"Altitude:  {alt} m\n"
-                    f"Fix Mode:  {packet.mode}D\n"
-                    f"Satellites: {sats}"
-                )
-            else:
-                text = "No fix yet... move outside if not already."
-        except Exception as e:
-            text = f"GPS error: {e}"
+            time.sleep(5)  # set to whatever
 
-        self.label.setText(text)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    widget = GPSWidget()
-    widget.show()
-    sys.exit(app.exec())
+    except (KeyboardInterrupt, SystemExit):  # when you press ctrl+c
+        print("\nKilling Thread…")
+        gpsp.running = False
+        gpsp.join()  # wait for the thread to finish what it's doing
+        print("Done.\nExiting.")
