@@ -33,7 +33,7 @@ class CameraTab(QWidget):
     def toggle_camera(self):
         if not self.camera_running:
             self.picam2 = Picamera2()
-            config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (640, 480)})
+            config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (1024, 600)})
             self.picam2.configure(config)
             self.picam2.start()
             self.timer.start(60)
