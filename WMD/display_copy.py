@@ -708,6 +708,9 @@ class MainWindow(QWidget):
        self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
        self.tab_labels.append("Rock Yard Map")
 
+       self.camera_tab = CameraTab()
+       self.tabs.addTab(self.camera_tab, "Camera")
+
        self.layout.addWidget(self.tabs)
 
        # Setup tab blinking for error indicators
