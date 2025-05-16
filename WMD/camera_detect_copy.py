@@ -1,5 +1,6 @@
-import sys
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QPushButton, QSizePolicy
+# camera_detect_copy.py
+
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
 
@@ -35,7 +36,7 @@ class CameraTab(QWidget):
             config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (640, 480)})
             self.picam2.configure(config)
             self.picam2.start()
-            self.timer.start(60)  # roughly 30 FPS
+            self.timer.start(60)
             self.button.setText("Stop Camera")
         else:
             self.timer.stop()
@@ -49,45 +50,10 @@ class CameraTab(QWidget):
     def update_frame(self):
         if self.picam2:
             frame = self.picam2.capture_array()
-
-            # Convert BGR to RGB if needed
             frame_rgb = frame[..., ::-1]
-
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
             qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
-
             pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.label.setPixmap(pix)
-
-
-class WelcomeTab(QWidget):
-    def __init__(self):
-        super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("Welcome! Use the Camera tab to see your Raspberry Pi camera feed.")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
-        self.setLayout(layout)
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("PyQt6 Picamera2 Tabs")
-        self.resize(800, 600)
-
-        self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
-
-        self.welcome_tab = WelcomeTab()
-        self.camera_tab = CameraTab()
-
-        self.tabs.addTab(self.welcome_tab, "Welcome")
-        self.tabs.addTab(self.camera_tab, "Camera")
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
