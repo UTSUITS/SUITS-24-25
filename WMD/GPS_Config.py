@@ -1,10 +1,15 @@
+import sys
 import time
 import struct
+import math
+from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPainter, QPolygon, QColor, QPen, QFont
 import smbus2
 
-# Your provided QMC5883L class here (copy-paste exactly from your code)
+# QMC5883L and I2CWrapper classes as before (copy exactly from previous script)...
+
 class QMC5883L:
-    # Constants and register definitions as per your provided code
     ADDR = 0x0D
     X_LSB = 0
     X_MSB = 1
@@ -93,7 +98,6 @@ class QMC5883L:
         scale = 12000 if self.range == QMC5883L.CONFIG_2GAUSS else 3000
         return (x / scale, y / scale, z / scale, (temp / 100 + self.temp_offset))
 
-# I2C Wrapper for smbus2 to match expected interface
 class I2CWrapper:
     def __init__(self, bus):
         self.bus = bus
@@ -110,17 +114,95 @@ class I2CWrapper:
         for i in range(len(buf)):
             buf[i] = data[i]
 
+class CompassWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.heading = 0  # degrees
+
+    def set_heading(self, heading):
+        self.heading = heading
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        size = min(self.width(), self.height())
+        cx, cy = self.width() // 2, self.height() // 2
+        radius = size // 2 - 10
+
+        # Draw outer circle
+        painter.setPen(QPen(Qt.GlobalColor.black, 2))
+        painter.setBrush(QColor(240, 240, 240))
+        painter.drawEllipse(cx - radius, cy - radius, 2 * radius, 2 * radius)
+
+        # Draw cardinal points
+        painter.setFont(QFont('Arial', 12))
+        directions = [('N', 0), ('E', 90), ('S', 180), ('W', 270)]
+        for d, angle in directions:
+            angle_rad = math.radians(angle)
+            tx = cx + math.sin(angle_rad) * (radius - 20)
+            ty = cy - math.cos(angle_rad) * (radius - 20)
+            painter.drawText(int(tx) - 10, int(ty) + 6, d)
+
+        # Draw heading arrow
+        painter.setPen(QPen(Qt.GlobalColor.red, 3))
+        painter.setBrush(Qt.GlobalColor.red)
+        painter.translate(cx, cy)
+        painter.rotate(self.heading)
+        arrow = QPolygon([
+            QPoint(0, -radius + 20),
+            QPoint(-10, 10),
+            QPoint(0, 0),
+            QPoint(10, 10)
+        ])
+        painter.drawPolygon(arrow)
+
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("QMC5883L Compass")
+        self.resize(300, 400)
+
+        self.mag_label = QLabel("Magnetic Field: X=0.00 Y=0.00 Z=0.00")
+        self.temp_label = QLabel("Temperature: 0.00 °C")
+
+        self.compass = CompassWidget()
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.mag_label)
+        layout.addWidget(self.temp_label)
+        layout.addWidget(self.compass)
+
+        self.setLayout(layout)
+
+        bus = smbus2.SMBus(1)
+        i2c = I2CWrapper(bus)
+        self.sensor = QMC5883L(i2c)
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_readings)
+        self.timer.start(1000)  # 1 second update
+
+    def update_readings(self):
+        try:
+            x, y, z, temp = self.sensor.read_scaled()
+            self.mag_label.setText(f"Magnetic Field: X={x:.3f} Y={y:.3f} Z={z:.3f}")
+            self.temp_label.setText(f"Temperature: {temp:.2f} °C")
+
+            # Calculate heading in degrees from X and Y
+            heading_rad = math.atan2(y, x)
+            heading_deg = math.degrees(heading_rad)
+            if heading_deg < 0:
+                heading_deg += 360
+
+            self.compass.set_heading(heading_deg)
+        except Exception as e:
+            self.mag_label.setText(f"Error reading sensor: {e}")
+
 def main():
-    bus = smbus2.SMBus(1)  # Raspberry Pi default I2C bus
-    i2c = I2CWrapper(bus)
-    compass = QMC5883L(i2c)
-    
-    while True:
-        x, y, z, temp = compass.read_scaled()
-        print(f"Magnetic Field (Gauss): X={x:.3f}, Y={y:.3f}, Z={z:.3f}")
-        print(f"Temperature (°C): {temp:.2f}")
-        print("-" * 30)
-        time.sleep(1)
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
