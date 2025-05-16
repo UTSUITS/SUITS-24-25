@@ -1,38 +1,62 @@
 import sys
 import threading
 import time
-from gps import *
+import random
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import Qt, QTimer
 
-gpsd = None
+# Simulated GPS fix data class
+class SimulatedFix:
+    def __init__(self):
+        self.latitude = None
+        self.longitude = None
+        self.speed = None
+        self.track = None
+
+    def update(self):
+        # Simulate realistic GPS values:
+        self.latitude = 30.2672 + random.uniform(-0.001, 0.001)    # Around Austin, TX
+        self.longitude = -97.7431 + random.uniform(-0.001, 0.001)
+        self.speed = random.uniform(0, 5)   # 0 to 5 m/s speed
+        self.track = random.uniform(0, 360) # 0 to 360 degrees
+
+# Simulated GPSD class to mimic gpsd interface
+class SimulatedGPSD:
+    def __init__(self):
+        self.fix = SimulatedFix()
+        self.running = True
+
+    def next(self):
+        # Update simulated GPS data periodically
+        self.fix.update()
+        time.sleep(1)
 
 class GpsPoller(threading.Thread):
-    def __init__(self):
+    def __init__(self, gpsd):
         super().__init__()
-        global gpsd
-        gpsd = gps(mode=WATCH_ENABLE)
+        self.gpsd = gpsd
         self.running = True
 
     def run(self):
-        global gpsd
         while self.running:
-            gpsd.next()
+            self.gpsd.next()
 
 class GpsWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
-        self.gps_poller = GpsPoller()
+
+        # Use simulated GPSD
+        self.gpsd = SimulatedGPSD()
+        self.gps_poller = GpsPoller(self.gpsd)
         self.gps_poller.start()
 
-        # Timer to update UI every second
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_gps_data)
-        self.timer.start(1000)
+        self.timer.start(1000)  # update every 1 second
 
     def initUI(self):
-        self.setWindowTitle("GPS Data")
+        self.setWindowTitle("Simulated GPS Data")
         self.layout = QVBoxLayout()
 
         self.lat_label = QLabel("Latitude: N/A")
@@ -48,19 +72,14 @@ class GpsWidget(QWidget):
         self.resize(300, 150)
 
     def update_gps_data(self):
-        # Update labels with latest GPS data, handle possible None values
-        lat = getattr(gpsd.fix, 'latitude', 'N/A')
-        lon = getattr(gpsd.fix, 'longitude', 'N/A')
-        speed = getattr(gpsd.fix, 'speed', 'N/A')
-        track = getattr(gpsd.fix, 'track', 'N/A')
+        fix = self.gpsd.fix
 
-        self.lat_label.setText(f"Latitude: {lat if lat is not None else 'N/A'}")
-        self.lon_label.setText(f"Longitude: {lon if lon is not None else 'N/A'}")
-        self.speed_label.setText(f"Speed (m/s): {speed if speed is not None else 'N/A'}")
-        self.track_label.setText(f"Track (degrees): {track if track is not None else 'N/A'}")
+        self.lat_label.setText(f"Latitude: {fix.latitude:.6f}")
+        self.lon_label.setText(f"Longitude: {fix.longitude:.6f}")
+        self.speed_label.setText(f"Speed (m/s): {fix.speed:.2f}")
+        self.track_label.setText(f"Track (degrees): {fix.track:.2f}")
 
     def closeEvent(self, event):
-        # Stop the GPS poller thread when closing the widget
         self.gps_poller.running = False
         self.gps_poller.join()
         event.accept()
