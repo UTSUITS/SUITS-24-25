@@ -722,11 +722,6 @@ class MainWindow(QWidget):
        self.camera_detect_copy = CameraTab()
        self.tabs.addTab(self.camera_detect_copy, "📸 Camera Feed") 
 
-       central_widget = QWidget()
-       main_layout = QVBoxLayout(central_widget)
-       main_layout.addWidget(self.tabs)
-       self.setCentralWidget(central_widget)
-
 
 
     def _advance_simulation(self):
