@@ -1,158 +1,142 @@
+import io
 import os
-import glob
 import time
 import threading
-from http import server
-from datetime import datetime
-from urllib.parse import parse_qs
-from http.server import SimpleHTTPRequestHandler, HTTPServer
-import socketserver
-# import cv2  # Commented out OpenCV webcam use
-from PIL import Image
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+from urllib.parse import urlparse, parse_qs
 
-# PiCamera2 imports for Pi use
+import cv2
+import numpy as np
+from PIL import Image
 from picamera2 import Picamera2, Preview
 from libcamera import Transform
 
-PAGE = '''...'''  # unchanged HTML
-
-class StreamingHandler(server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/' or self.path == '/index.html':
-            files = glob.glob('media/*')
-            file_list = '\n'.join([f'<li>{os.path.basename(f)}</li>' for f in sorted(files, key=os.path.getctime, reverse=True)])
-            content = PAGE.format(files=file_list).encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
-            self.send_header('Content-Length', len(content))
-            self.end_headers()
-            self.wfile.write(content)
-        elif self.path == '/stream.mjpg':
-            self.send_response(200)
-            self.send_header('Age', 0)
-            self.send_header('Cache-Control', 'no-cache, private')
-            self.send_header('Pragma', 'no-cache')
-            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-            self.end_headers()
-            stream_start = time.time()
-            try:
-                while True:
-                    frame = picam2.capture_array()
-
-                    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    elapsed = time.time() - stream_start
-                    elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
-                    blink_on = int(time.time() * 2) % 2 == 0
-
-                    # Add annotations
-                    if blink_on:
-                        import cv2
-                        cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
-                        cv2.putText(frame, f"Time: {now_str}", (50, 30),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                        cv2.putText(frame, f"Live: {elapsed_str}", (50, 55),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-                    import cv2
-                    _, jpeg = cv2.imencode('.jpg', frame)
-                    self.wfile.write(b'--FRAME\r\n')
-                    self.send_header('Content-Type', 'image/jpeg')
-                    self.send_header('Content-Length', str(len(jpeg)))
-                    self.end_headers()
-                    self.wfile.write(jpeg.tobytes())
-                    self.wfile.write(b'\r\n')
-                    time.sleep(1/24)
-            except Exception as e:
-                print('Removed streaming client:', self.client_address, str(e))
-        elif self.path == '/status':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(('{"recording": ' + ('true' if recording else 'false') + '}').encode())
-        else:
-            self.send_error(404)
-            self.end_headers()
-
-    def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length).decode('utf-8')
-        fields = parse_qs(post_data)
-        if self.path == '/photo':
-            filename = fields.get('filename', [''])[0].strip()
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f'media/{filename or "photo_" + timestamp}.jpg'
-            frame = picam2.capture_array()
-            import cv2
-            cv2.imwrite(filename, frame)
-        elif self.path == '/video':
-            action = fields.get('action', [''])[0]
-            name = fields.get('filename', [''])[0].strip()
-            global recording, video_writer, recording_start
-            if action == 'start' and not recording:
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                video_name = f'media/{name or "video_" + timestamp}.avi'
-                import cv2
-                fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                video_writer = cv2.VideoWriter(video_name, fourcc, 24.0, (640, 480))
-                recording_start = time.time()
-                recording = True
-            elif action == 'stop' and recording:
-                recording = False
-                video_writer.release()
-        self.send_response(303)
-        self.send_header('Location', '/')
-        self.end_headers()
-
-class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-
-# Setup folder
-os.makedirs('media', exist_ok=True)
-
-# ==== Raspberry Pi camera setup ====
+# Start and configure the PiCamera2
 picam2 = Picamera2()
 picam2.configure(picam2.create_video_configuration(main={"size": (640, 480)}))
 picam2.start()
-# ===================================
 
-# Commented out OpenCV laptop webcam setup
-# camera = cv2.VideoCapture(0)
+output_dir = "output"
+os.makedirs(output_dir, exist_ok=True)
 
-recording = False
-recording_start = None
-video_writer = None
+is_recording = False
+recording_thread = None
 
-def recording_loop():
-    global recording
-    while True:
-        if recording:
+class CamHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query = parse_qs(parsed_path.query)
+
+        if path == "/":
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            files = os.listdir(output_dir)
+            file_links = "<br>".join(
+                f'<a href="/{output_dir}/{file}">{file}</a>' for file in files
+            )
+            html = f"""
+                <html>
+                <head>
+                    <title>Pi Camera Stream</title>
+                </head>
+                <body>
+                    <h1>Pi Camera Live Stream</h1>
+                    <img src="/stream.mjpg" width="640" height="480" />
+                    <h2>Controls</h2>
+                    <a href="/photo">Take Photo</a><br>
+                    <a href="/video?record=true">Start Recording</a><br>
+                    <a href="/video?record=false">Stop Recording</a><br>
+                    <h2>Saved Files</h2>
+                    {file_links if files else "..."}
+                </body>
+                </html>
+            """
+            self.wfile.write(html.encode("utf-8"))
+
+        elif path == "/stream.mjpg":
+            self.send_response(200)
+            self.send_header("Content-type", "multipart/x-mixed-replace; boundary=--jpgboundary")
+            self.end_headers()
+
+            try:
+                while True:
+                    frame = picam2.capture_array()
+                    _, jpeg = cv2.imencode('.jpg', frame)
+                    self.wfile.write(b"--jpgboundary\r\n")
+                    self.send_header("Content-type", "image/jpeg")
+                    self.send_header("Content-length", str(len(jpeg)))
+                    self.end_headers()
+                    self.wfile.write(jpeg.tobytes())
+                    time.sleep(0.1)
+            except Exception as e:
+                print(f"Streaming stopped: {e}")
+
+        elif path == "/photo":
             frame = picam2.capture_array()
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            elapsed = time.time() - recording_start
-            elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
-            blink_on = int(time.time() * 2) % 2 == 0
+            filename = os.path.join(output_dir, f"photo_{int(time.time())}.jpg")
+            cv2.imwrite(filename, frame)
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.end_headers()
 
-            import cv2
-            if blink_on:
-                cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
-            cv2.putText(frame, f"Time: {now_str}", (50, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv2.putText(frame, f"Recording: {elapsed_str}", (50, 55),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        elif path == "/video":
+            global is_recording, recording_thread
+            if "record" in query:
+                record = query["record"][0].lower() == "true"
+                if record and not is_recording:
+                    is_recording = True
+                    recording_thread = threading.Thread(target=self.recording_loop)
+                    recording_thread.start()
+                elif not record and is_recording:
+                    is_recording = False
+                    if recording_thread:
+                        recording_thread.join()
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.end_headers()
 
-            video_writer.write(frame)
-        time.sleep(1/24)
+        elif path.startswith(f"/{output_dir}/"):
+            filepath = path.lstrip("/")
+            if os.path.exists(filepath):
+                self.send_response(200)
+                self.send_header("Content-type", "application/octet-stream")
+                self.end_headers()
+                with open(filepath, "rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_response(404)
+                self.end_headers()
 
-record_thread = threading.Thread(target=recording_loop, daemon=True)
-record_thread.start()
+    def recording_loop(self):
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        filename = os.path.join(output_dir, f"video_{int(time.time())}.avi")
+        out = cv2.VideoWriter(filename, fourcc, 20.0, (640, 480))
 
-try:
-    address = ('', 8000)
-    server = StreamingServer(address, StreamingHandler)
-    print("Starting EV1 camera server on port 8000...")
-    server.serve_forever()
-finally:
-    # camera.release()  # not used on Pi
-    if video_writer:
-        video_writer.release()
+        while is_recording:
+            frame = picam2.capture_array()
+            out.write(frame)
+            time.sleep(0.05)
+
+        out.release()
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in a separate thread."""
+
+def run(server_class=ThreadedHTTPServer, handler_class=CamHandler, port=8000):
+    server_address = ('', port)
+    httpd = server_class(server_address, handler_class)
+    print(f"Server started at http://localhost:{port}")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("\nShutting down server.")
+        picam2.stop()
+        httpd.server_close()
+
+if __name__ == "__main__":
+    run()
