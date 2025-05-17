@@ -1,225 +1,281 @@
 import sys
 import threading
 import time
-import random
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QProgressBar, 
-    QFrame, QSizePolicy
+    QApplication, QWidget, QLabel, QPushButton,
+    QVBoxLayout, QHBoxLayout, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
-from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QConicalGradient
+from PyQt6.QtCore import Qt, QTimer, QPointF
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 
+# Uncomment below to use actual GPSD connection
+# import gps
 
-# Simulated GPS fix data class (same as before)
-class SimulatedFix:
+# --- Simulated GPS data classes for testing without GPSD ---
+class SimulatedGPSFix:
     def __init__(self):
-        self.latitude = None
-        self.longitude = None
-        self.speed = None
-        self.track = None
+        self.latitude = 37.7749
+        self.longitude = -122.4194
+        self.speed = 0.0  # meters/sec
+        self.track = 0.0  # degrees
 
     def update(self):
-        self.latitude = 30.2672 + random.uniform(-0.001, 0.001)    # Austin TX approx
-        self.longitude = -97.7431 + random.uniform(-0.001, 0.001)
-        self.speed = random.uniform(0, 10)   # 0-10 m/s speed range for demo
-        self.track = random.uniform(0, 360)  # 0-360 degrees
+        # Simulate GPS position and movement
+        self.latitude += 0.0001
+        self.longitude += 0.0001
+        self.speed = (self.speed + 0.1) % 20
+        self.track = (self.track + 5) % 360
 
 
-# Simulated GPSD class (same interface as gpsd)
 class SimulatedGPSD:
     def __init__(self):
-        self.fix = SimulatedFix()
-        self.running = True
-
-    def next(self):
-        self.fix.update()
-        time.sleep(1)
+        self.fix = SimulatedGPSFix()
 
 
 class GpsPoller(threading.Thread):
     def __init__(self, gpsd):
-        super().__init__()
+        threading.Thread.__init__(self)
         self.gpsd = gpsd
         self.running = True
 
     def run(self):
         while self.running:
-            self.gpsd.next()
+            self.gpsd.fix.update()
+            time.sleep(1)
 
+
+# --- Widgets ---
 
 class CompassWidget(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.angle = 0  # Track angle in degrees
-        self.setMinimumSize(300, 300)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.angle = 0
+        self.setMinimumSize(150, 150)
+        self.setMaximumSize(150, 150)
 
     def setAngle(self, angle):
-        self.angle = angle % 360
+        self.angle = angle
         self.update()
 
     def paintEvent(self, event):
-        size = min(self.width(), self.height())
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Center and radius
-        center = self.rect().center()
-        radius = size // 2 - 10
-
-        # Draw outer circle
-        pen = QPen(QColor("#00bcff"))
-        pen.setWidth(4)
-        painter.setPen(pen)
-        painter.setBrush(QColor("#121212"))
-        painter.drawEllipse(center, radius, radius)
-
-        # Draw compass ticks every 30 degrees
-        painter.setPen(QPen(QColor("#00bcff"), 2))
-        for i in range(12):
-            angle_deg = i * 30
-            rad = angle_deg * 3.14159265359 / 180
-            inner = QPoint(
-                center.x() + int((radius - 15) * -sin(rad)),
-                center.y() + int((radius - 15) * -cos(rad))
-            )
-            outer = QPoint(
-                center.x() + int(radius * -sin(rad)),
-                center.y() + int(radius * -cos(rad))
-            )
-            painter.drawLine(inner, outer)
-
-        # Draw N, E, S, W labels
-        font = QFont("Arial", 14, QFont.Weight.Bold)
-        painter.setFont(font)
-        directions = {"N": 0, "E": 90, "S": 180, "W": 270}
-        for label, deg in directions.items():
-            rad = deg * 3.14159265359 / 180
-            point = QPoint(
-                center.x() + int((radius - 35) * -sin(rad)),
-                center.y() + int((radius - 35) * -cos(rad))
-            )
-            painter.drawText(point - QPoint(10, -7), label)
-
-        # Draw needle
+        # Background white circle
+        painter.setBrush(QColor("white"))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#ff4c4c"))
-        painter.save()
-        painter.translate(center)
-        painter.rotate(-self.angle)
-        needle = [QPoint(0, -10), QPoint(-8, 0), QPoint(0, radius - 40), QPoint(8, 0)]
-        painter.drawPolygon(*needle)
-        painter.restore()
+        painter.drawEllipse(0, 0, self.width(), self.height())
+
+        # Draw compass needle in dark gray
+        painter.setPen(QPen(QColor("#222222"), 3))
+        painter.setBrush(QColor("#222222"))
+
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.rotate(self.angle)
+
+        needle_path = [
+            QPointF(0, -self.height() * 0.4),
+            QPointF(-10, 0),
+            QPointF(0, -10),
+            QPointF(10, 0),
+        ]
+        painter.drawPolygon(*needle_path)
 
 
-from math import sin, cos
+class SpeedometerWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.speed = 0
+        self.setMinimumSize(150, 150)
+        self.setMaximumSize(150, 150)
+
+    def setSpeed(self, speed):
+        self.speed = speed
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Background white circle
+        painter.setBrush(QColor("white"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(0, 0, self.width(), self.height())
+
+        center = self.width() / 2, self.height() / 2
+
+        # Draw speed arc in dark gray (from 45 to 135 degrees)
+        painter.setPen(QPen(QColor("#222222"), 5))
+        painter.drawArc(10, 10, self.width() - 20, self.height() - 20, 45 * 16, 90 * 16)
+
+        # Draw needle according to speed (0-20 m/s)
+        painter.setPen(QPen(QColor("#222222"), 3))
+        painter.translate(*center)
+
+        angle = 45 + (min(self.speed, 20) / 20) * 90
+        painter.rotate(angle)
+        painter.drawLine(0, 0, 0, int(-self.height() * 0.4))
+
+
+class BreadcrumbMapWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.breadcrumbs = []
+
+        self.setMinimumSize(400, 400)
+        self.setStyleSheet("background-color: #222222;")
+
+    def add_breadcrumb(self, lat, lon):
+        self.breadcrumbs.append((lat, lon))
+        self.update()
+
+    def clear_breadcrumbs(self):
+        self.breadcrumbs.clear()
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor("#222222"))
+
+        if not self.breadcrumbs:
+            return
+
+        lats = [pt[0] for pt in self.breadcrumbs]
+        lons = [pt[1] for pt in self.breadcrumbs]
+
+        lat_min, lat_max = min(lats), max(lats)
+        lon_min, lon_max = min(lons), max(lons)
+
+        if lat_max - lat_min < 0.0001:
+            lat_max += 0.0001
+            lat_min -= 0.0001
+        if lon_max - lon_min < 0.0001:
+            lon_max += 0.0001
+            lon_min -= 0.0001
+
+        def map_point(lat, lon):
+            x = (lon - lon_min) / (lon_max - lon_min) * self.width()
+            y = self.height() - (lat - lat_min) / (lat_max - lat_min) * self.height()
+            return QPointF(x, y)
+
+        points = [map_point(lat, lon) for lat, lon in self.breadcrumbs]
+
+        pen = QPen(QColor("white"), 2)
+        painter.setPen(pen)
+        for i in range(len(points) - 1):
+            painter.drawLine(points[i], points[i + 1])
+
+        painter.setBrush(QColor("red"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(points[-1], 6, 6)
 
 
 class GpsWidget(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Simulated GPS Dashboard")
-        self.setFixedSize(1100, 600)
-        self.setStyleSheet("background-color: #121212; color: #e0e0e0; font-family: Arial;")
+        self.setWindowTitle("GPS Dashboard")
+        self.setStyleSheet("background-color: #000000;")
 
-        # Simulated GPS
+        # Real GPSD connection (commented out for now)
+        # self.gpsd = gps.gps(host="localhost", port=2947)
+        # self.gpsd.stream(gps.WATCH_ENABLE | gps.WATCH_NEWSTYLE)
+        # self.gpsp = GpsPoller(self.gpsd)
+        # self.gpsp.start()
+
+        # Using simulated GPS data for testing
         self.gpsd = SimulatedGPSD()
-        self.gps_poller = GpsPoller(self.gpsd)
-        self.gps_poller.start()
+        self.gpsp = GpsPoller(self.gpsd)
+        self.gpsp.start()
 
-        # Layouts
-        main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        self.init_ui()
 
-        # Left panel: Data labels + speed bar
-        left_panel = QVBoxLayout()
-        left_panel.setSpacing(20)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_display)
+        self.timer.start(1000)
 
-        title = QLabel("GPS Data")
-        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #00bcff;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_panel.addWidget(title)
+        self.breadcrumb_running = False
 
-        # Latitude and Longitude labels
-        self.lat_label = QLabel("Latitude: N/A")
-        self.lon_label = QLabel("Longitude: N/A")
-        self.speed_label = QLabel("Speed (m/s): N/A")
-        self.track_label = QLabel("Track (deg): N/A")
-
-        label_style = "font-size: 22px; padding: 8px;"
-        for lbl in [self.lat_label, self.lon_label, self.speed_label, self.track_label]:
-            lbl.setStyleSheet(label_style)
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            left_panel.addWidget(lbl)
-
-        # Speed bar
-        speed_label = QLabel("Speed Indicator")
-        speed_label.setStyleSheet("font-size: 18px; color: #aaaaaa;")
-        speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_panel.addWidget(speed_label)
-
-        self.speed_bar = QProgressBar()
-        self.speed_bar.setMinimum(0)
-        self.speed_bar.setMaximum(20)  # Max speed 20 m/s (arbitrary)
-        self.speed_bar.setTextVisible(True)
-        self.speed_bar.setFormat("%v m/s")
-        self.speed_bar.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #00bcff;
-                border-radius: 10px;
-                background-color: #333333;
-                height: 30px;
-                font-size: 18px;
-                color: #00bcff;
-            }
-            QProgressBar::chunk {
-                background-color: #00bcff;
-                border-radius: 10px;
-            }
-        """)
-        left_panel.addWidget(self.speed_bar)
-
-        left_panel.addStretch()
-        main_layout.addLayout(left_panel, 3)
-
-        # Right panel: Compass widget
-        right_panel = QVBoxLayout()
-        right_panel.setContentsMargins(0, 0, 0, 0)
-        right_panel.setSpacing(10)
-
-        compass_title = QLabel("Heading")
-        compass_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        compass_title.setStyleSheet("font-size: 28px; font-weight: bold; color: #00bcff;")
-        right_panel.addWidget(compass_title)
+    def init_ui(self):
+        left_layout = QVBoxLayout()
+        left_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.compass = CompassWidget()
-        right_panel.addWidget(self.compass, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.speedometer = SpeedometerWidget()
+        left_layout.addWidget(self.compass)
+        left_layout.addWidget(self.speedometer)
 
-        right_panel.addStretch()
+        self.lat_label = QLabel("Latitude: ---")
+        self.lon_label = QLabel("Longitude: ---")
+        self.speed_label = QLabel("Speed: --- m/s")
+        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.speed_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.bearing_label = QLabel("Bearing: ---°")
 
-        main_layout.addLayout(right_panel, 4)
+        for widget in [self.lat_label, self.lon_label, self.speed_label, self.bearing_label]:
+            widget.setFont(QFont("Arial", 12))
+            widget.setStyleSheet("color: white;")
+            left_layout.addWidget(widget)
+
+        self.start_breadcrumb_btn = QPushButton("Start Breadcrumb")
+        self.start_breadcrumb_btn.setStyleSheet("background-color: #008000; color: white; padding: 6px;")
+        self.start_breadcrumb_btn.clicked.connect(self.start_breadcrumb)
+        left_layout.addWidget(self.start_breadcrumb_btn)
+
+        self.stop_breadcrumb_btn = QPushButton("Stop Breadcrumb")
+        self.stop_breadcrumb_btn.setStyleSheet("background-color: #800000; color: white; padding: 6px;")
+        self.stop_breadcrumb_btn.clicked.connect(self.stop_breadcrumb)
+        self.stop_breadcrumb_btn.setEnabled(False)
+        left_layout.addWidget(self.stop_breadcrumb_btn)
+
+        self.clear_breadcrumb_btn = QPushButton("Clear Breadcrumb")
+        self.clear_breadcrumb_btn.setStyleSheet("background-color: #555555; color: white; padding: 6px;")
+        self.clear_breadcrumb_btn.clicked.connect(self.clear_breadcrumb)
+        left_layout.addWidget(self.clear_breadcrumb_btn)
+
+        self.breadcrumb_map = BreadcrumbMapWidget()
+        self.breadcrumb_map.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        main_layout = QHBoxLayout()
+        main_layout.addLayout(left_layout, 1)
+        main_layout.addWidget(self.breadcrumb_map, 3)
 
         self.setLayout(main_layout)
 
-        # Timer for updates
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_gps_data)
-        self.timer.start(1000)
+    def start_breadcrumb(self):
+        self.breadcrumb_running = True
+        self.start_breadcrumb_btn.setEnabled(False)
+        self.stop_breadcrumb_btn.setEnabled(True)
 
-    def update_gps_data(self):
+    def stop_breadcrumb(self):
+        self.breadcrumb_running = False
+        self.start_breadcrumb_btn.setEnabled(True)
+        self.stop_breadcrumb_btn.setEnabled(False)
+
+    def clear_breadcrumb(self):
+        self.breadcrumb_map.clear_breadcrumbs()
+
+    def update_display(self):
         fix = self.gpsd.fix
+        lat = fix.latitude
+        lon = fix.longitude
+        speed = fix.speed
+        bearing = fix.track
 
-        self.lat_label.setText(f"Latitude: {fix.latitude:.6f}")
-        self.lon_label.setText(f"Longitude: {fix.longitude:.6f}")
-        self.speed_label.setText(f"Speed (m/s): {fix.speed:.2f}")
-        self.track_label.setText(f"Track (deg): {fix.track:.2f}")
+        self.lat_label.setText(f"Latitude: {lat:.6f}")
+        self.lon_label.setText(f"Longitude: {lon:.6f}")
+        self.speed_label.setText(f"Speed: {speed:.2f} m/s")
+        self.bearing_label.setText(f"Bearing: {bearing:.1f}°")
 
-        self.speed_bar.setValue(int(fix.speed))
-        self.compass.setAngle(fix.track)
+        self.compass.setAngle(bearing)
+        self.speedometer.setSpeed(speed)
+
+        if self.breadcrumb_running and lat is not None and lon is not None:
+            self.breadcrumb_map.add_breadcrumb(lat, lon)
 
     def closeEvent(self, event):
-        self.gps_poller.running = False
-        self.gps_poller.join()
+        self.gpsp.running = False
+        self.gpsp.join()
         event.accept()
 
 
