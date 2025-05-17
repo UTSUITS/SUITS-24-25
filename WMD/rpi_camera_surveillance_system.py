@@ -25,6 +25,8 @@ recording_thread = None
 
 class CamHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        global is_recording
+
         parsed_path = urlparse(self.path)
         path = parsed_path.path
         query = parse_qs(parsed_path.query)
@@ -33,24 +35,83 @@ class CamHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
+
             files = os.listdir(output_dir)
             file_links = "<br>".join(
-                f'<a href="/{output_dir}/{file}">{file}</a>' for file in files
+                f'<a href="/{output_dir}/{file}" style="color:#ccc;">{file}</a>' for file in files
             )
+
+            recording_text = "Recording..." if is_recording else "Start Recording"
+
+            # Dark mode UI with buttons and saved files on right side
             html = f"""
                 <html>
                 <head>
                     <title>Pi Camera Stream</title>
+                    <style>
+                        body {{
+                            background-color: #121212;
+                            color: #eee;
+                            font-family: Arial, sans-serif;
+                            margin: 0; padding: 0;
+                        }}
+                        .container {{
+                            display: flex;
+                            height: 100vh;
+                        }}
+                        .left-panel {{
+                            flex: 2;
+                            padding: 20px;
+                        }}
+                        .right-panel {{
+                            flex: 1;
+                            padding: 20px;
+                            background-color: #1e1e1e;
+                            overflow-y: auto;
+                            border-left: 1px solid #333;
+                        }}
+                        h1, h2 {{
+                            color: #fff;
+                        }}
+                        a.button {{
+                            display: inline-block;
+                            margin: 10px 10px 10px 0;
+                            padding: 10px 20px;
+                            background-color: #2d89ef;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            font-weight: bold;
+                            user-select: none;
+                        }}
+                        a.button:hover {{
+                            background-color: #1b5fbd;
+                        }}
+                        a.button.recording {{
+                            background-color: #e53935;
+                            pointer-events: none;
+                            cursor: default;
+                        }}
+                        img {{
+                            border: 3px solid #2d89ef;
+                            border-radius: 8px;
+                        }}
+                    </style>
                 </head>
                 <body>
-                    <h1>Pi Camera Live Stream</h1>
-                    <img src="/stream.mjpg" width="640" height="480" />
-                    <h2>Controls</h2>
-                    <a href="/photo">Take Photo</a><br>
-                    <a href="/video?record=true">Start Recording</a><br>
-                    <a href="/video?record=false">Stop Recording</a><br>
-                    <h2>Saved Files</h2>
-                    {file_links if files else "..."}
+                    <div class="container">
+                        <div class="left-panel">
+                            <h1>Pi Camera Live Stream</h1>
+                            <img src="/stream.mjpg" width="640" height="480" />
+                            <h2>Controls</h2>
+                            <a href="/photo" class="button">Take Photo</a><br>
+                            {"<a href=\"/video?record=false\" class=\"button\">Stop Recording</a>" if is_recording else f"<a href=\"/video?record=true\" class=\"button\">{recording_text}</a>"}
+                        </div>
+                        <div class="right-panel">
+                            <h2>Saved Files</h2>
+                            {file_links if files else "<p>No files saved yet.</p>"}
+                        </div>
+                    </div>
                 </body>
                 </html>
             """
@@ -63,9 +124,10 @@ class CamHandler(BaseHTTPRequestHandler):
 
             try:
                 while True:
-                    frame = picam2.capture_array()
-                    frame_rgb = frame[..., ::-1]
-                    _, jpeg = cv2.imencode('.jpg', frame_rgb)
+                    frame = picam2.capture_array()  # RGB format
+                    # Convert RGB to BGR for OpenCV
+                    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    _, jpeg = cv2.imencode('.jpg', frame_bgr)
                     self.wfile.write(b"--jpgboundary\r\n")
                     self.send_header("Content-type", "image/jpeg")
                     self.send_header("Content-length", str(len(jpeg)))
@@ -76,10 +138,11 @@ class CamHandler(BaseHTTPRequestHandler):
                 print(f"Streaming stopped: {e}")
 
         elif path == "/photo":
-            frame = picam2.capture_array()
-            frame_rgb = frame[..., ::-1]
+            frame = picam2.capture_array()  # RGB format
+            # Convert RGB to BGR before saving
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             filename = os.path.join(output_dir, f"photo_{int(time.time())}.jpg")
-            cv2.imwrite(filename, frame_rgb)
+            cv2.imwrite(filename, frame_bgr)
             self.send_response(303)
             self.send_header("Location", "/")
             self.end_headers()
@@ -118,9 +181,10 @@ class CamHandler(BaseHTTPRequestHandler):
         out = cv2.VideoWriter(filename, fourcc, 20.0, (640, 480))
 
         while is_recording:
-            frame = picam2.capture_array()
-            frame_rgb = frame[..., ::-1]
-            out.write(frame_rgb)
+            frame = picam2.capture_array()  # RGB format
+            # Convert RGB to BGR before writing to video
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            out.write(frame_bgr)
             time.sleep(0.05)
 
         out.release()
