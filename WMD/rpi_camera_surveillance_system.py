@@ -31,9 +31,41 @@ class CamHandler(BaseHTTPRequestHandler):
         path = parsed_path.path
         query = parse_qs(parsed_path.query)
 
+        # Handle rename GET page
+        if path == "/rename":
+            file_to_rename = query.get("file", [""])[0]
+            if not file_to_rename or not os.path.exists(os.path.join(output_dir, file_to_rename)):
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"File not found for renaming")
+                return
+
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+
+            html = f"""
+            <html>
+            <head><title>Rename File</title></head>
+            <body style="background:#121212;color:#eee;font-family:Arial;padding:20px;">
+                <h1>Rename File: {file_to_rename}</h1>
+                <form method="POST" action="/rename">
+                    <input type="hidden" name="oldname" value="{file_to_rename}">
+                    <label for="newname">New filename:</label><br>
+                    <input type="text" id="newname" name="newname" value="{file_to_rename}" style="width:300px;padding:5px;font-size:16px;"><br><br>
+                    <input type="submit" value="Rename" style="padding:10px 20px;font-size:16px;">
+                </form>
+                <br><a href="/">Back to main page</a>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode("utf-8"))
+            return
+
         files = os.listdir(output_dir)
         file_links = "<br>".join(
-            f'<a href="/{output_dir}/{file}">{file}</a>' for file in files
+            f'<a href="/{output_dir}/{file}">{file}</a> <a href="/rename?file={file}" style="color:#2d89ef;">[Rename]</a>'
+            for file in files
         )
 
         recording_text = "Start Recording"
@@ -174,13 +206,56 @@ class CamHandler(BaseHTTPRequestHandler):
             filepath = path.lstrip("/")
             if os.path.exists(filepath):
                 self.send_response(200)
-                self.send_header("Content-type", "application/octet-stream")
+                # Send correct MIME for jpg and avi
+                if filepath.lower().endswith(".jpg"):
+                    self.send_header("Content-type", "image/jpeg")
+                elif filepath.lower().endswith(".avi"):
+                    self.send_header("Content-type", "video/x-msvideo")
+                else:
+                    self.send_header("Content-type", "application/octet-stream")
                 self.end_headers()
                 with open(filepath, "rb") as f:
                     self.wfile.write(f.read())
             else:
                 self.send_response(404)
                 self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/rename":
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            params = parse_qs(post_data)
+
+            oldname = params.get("oldname", [""])[0]
+            newname = params.get("newname", [""])[0].strip()
+
+            # Basic sanitize newname: prevent path traversal and empty names
+            if not newname or "/" in newname or "\\" in newname or newname.startswith("."):
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b"Invalid filename")
+                return
+
+            oldpath = os.path.join(output_dir, oldname)
+            newpath = os.path.join(output_dir, newname)
+
+            if not os.path.exists(oldpath):
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"Original file not found")
+                return
+
+            if os.path.exists(newpath):
+                self.send_response(409)
+                self.end_headers()
+                self.wfile.write(b"File with new name already exists")
+                return
+
+            os.rename(oldpath, newpath)
+
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.end_headers()
 
     def recording_loop(self):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
