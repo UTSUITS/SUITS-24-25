@@ -63,7 +63,8 @@ class CamHandler(BaseHTTPRequestHandler):
 
             try:
                 while True:
-                    frame = picam2.capture_array()
+                    frame = self.picam2.capture_array()
+                    frame_rgb = frame[..., ::-1]
                     _, jpeg = cv2.imencode('.jpg', frame)
                     self.wfile.write(b"--jpgboundary\r\n")
                     self.send_header("Content-type", "image/jpeg")
@@ -76,6 +77,8 @@ class CamHandler(BaseHTTPRequestHandler):
 
         elif path == "/photo":
             frame = picam2.capture_array()
+            frame = self.picam2.capture_array()
+            frame_rgb = frame[..., ::-1]
             filename = os.path.join(output_dir, f"photo_{int(time.time())}.jpg")
             cv2.imwrite(filename, frame)
             self.send_response(303)
@@ -116,7 +119,8 @@ class CamHandler(BaseHTTPRequestHandler):
         out = cv2.VideoWriter(filename, fourcc, 20.0, (640, 480))
 
         while is_recording:
-            frame = picam2.capture_array()
+            frame = picam2.capture_array()frame = self.picam2.capture_array()
+            frame_rgb = frame[..., ::-1]
             out.write(frame)
             time.sleep(0.05)
 
