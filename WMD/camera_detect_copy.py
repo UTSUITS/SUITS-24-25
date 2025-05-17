@@ -7,7 +7,10 @@ from PyQt6.QtGui import QImage, QPixmap
 from picamera2 import Picamera2
 import numpy as np
 import threading
-import http_server  # Import the server script
+import http_server  # your server script
+
+# Create shared Picamera2 instance
+shared_picam2 = Picamera2()
 
 class CameraTab(QWidget):
     def __init__(self):
@@ -25,7 +28,6 @@ class CameraTab(QWidget):
 
         self.setLayout(self.layout)
 
-        self.picam2 = None
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
 
@@ -35,30 +37,31 @@ class CameraTab(QWidget):
 
     def toggle_camera(self):
         if not self.camera_running:
-            self.picam2 = Picamera2()
-            config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (1024, 600)})
-            self.picam2.configure(config)
-            self.picam2.start()
+            config = shared_picam2.create_preview_configuration(main={"format": 'RGB888', "size": (1024, 600)})
+            shared_picam2.configure(config)
+            shared_picam2.start()
             self.timer.start(60)
             self.button.setText("Stop Camera")
 
-            # Start HTTP server
+            # Start HTTP server and pass shared camera
             if not self.http_thread:
-                self.http_thread = threading.Thread(target=http_server.start_http_server, daemon=True)
+                self.http_thread = threading.Thread(
+                    target=http_server.start_http_server,
+                    args=(shared_picam2,),  # Pass camera to the server
+                    daemon=True
+                )
                 self.http_thread.start()
 
         else:
             self.timer.stop()
-            if self.picam2:
-                self.picam2.stop()
-                self.picam2 = None
+            shared_picam2.stop()
             self.label.setText("Camera stopped")
             self.button.setText("Start Camera")
         self.camera_running = not self.camera_running
 
     def update_frame(self):
-        if self.picam2:
-            frame = self.picam2.capture_array()
+        if shared_picam2:
+            frame = shared_picam2.capture_array()
             frame_rgb = frame[..., ::-1]
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
