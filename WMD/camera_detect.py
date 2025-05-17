@@ -1,83 +1,59 @@
-import sys
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton,
-    QLabel, QTabWidget
-)
-from PyQt6.QtCore import Qt
+# camera_detect_copy.py
 
-app = QApplication([])
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QImage, QPixmap
 
+from picamera2 import Picamera2
+import numpy as np
 
 class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
-        layout = QVBoxLayout()
+        self.layout = QVBoxLayout()
 
-        # ✅ Lazy import AFTER QApplication is initialized
-        from picamera2 import Picamera2
-        from picamera2.previews.qt import QGlPicamera2
+        self.label = QLabel("Camera feed will appear here")
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setFixedSize(640, 480)
+        self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.layout.addWidget(self.label)
 
-        self.picam2 = Picamera2()
-        self.picam2.configure(self.picam2.create_preview_configuration())
-
-        self.qpicamera2 = QGlPicamera2(self.picam2, width=800, height=600, keep_ar=False)
-        layout.addWidget(self.qpicamera2)
-
-        # Create a button to start/stop the camera stream
         self.button = QPushButton("Start Camera")
+        self.layout.addWidget(self.button)
+
+        self.setLayout(self.layout)
+
+        self.picam2 = None
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frame)
+
         self.button.clicked.connect(self.toggle_camera)
-        layout.addWidget(self.button)
-
-        # Flag to track whether the camera is running
         self.camera_running = False
-
-        self.setLayout(layout)
 
     def toggle_camera(self):
         if not self.camera_running:
+            self.picam2 = Picamera2()
+            config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (1024, 600)})
+            self.picam2.configure(config)
             self.picam2.start()
-            self.qpicamera2.show()
+            self.timer.start(60)
             self.button.setText("Stop Camera")
         else:
-            self.picam2.stop()
-            self.qpicamera2.hide()
+            self.timer.stop()
+            if self.picam2:
+                self.picam2.stop()
+                self.picam2 = None
+            self.label.setText("Camera stopped")
             self.button.setText("Start Camera")
-
         self.camera_running = not self.camera_running
 
-
-class WelcomeTab(QWidget):
-    def __init__(self):
-        super().__init__()
-        layout = QVBoxLayout()
-        label = QLabel("👋 Welcome to the NASA SUITS Wrist-Mounted UI!\nSelect the camera tab to begin your EVA.")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("font-size: 18px; padding: 20px;")
-        layout.addWidget(label)
-        self.setLayout(layout)
-
-
-class MainApp(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("NASA SUITS Camera Interface")
-        self.resize(850, 700)
-
-        layout = QVBoxLayout()
-        self.tabs = QTabWidget()
-
-        self.welcome_tab = WelcomeTab()
-        self.camera_tab = CameraTab()
-
-        self.tabs.addTab(self.welcome_tab, "Welcome")
-        self.tabs.addTab(self.camera_tab, "Camera View")
-
-        layout.addWidget(self.tabs)
-        self.setLayout(layout)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)  # MUST come before any Qt widgets
-    window = MainApp()
-    window.show()
-    sys.exit(app.exec())
+    def update_frame(self):
+        if self.picam2:
+            frame = self.picam2.capture_array()
+            frame_rgb = frame[..., ::-1]
+            h, w, ch = frame_rgb.shape
+            bytes_per_line = ch * w
+            qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            pix = QPixmap.fromImage(qt_image)
+            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.label.setPixmap(pix)

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from camera_detect_copy import CameraTab
+from camera_detect import CameraTab
 
 import numpy as np
 
@@ -155,7 +155,7 @@ class LEDIndicator(QFrame):
 # Display the widgets in the command window
 class SystemStatusDisplay(QWidget):
 
-    def __init__(self, title_text, keys_labels, use_leds=False, notify_parent=None):
+    def __init__(self, title_text, keys_labels, use_leds=False, notify_parent=None, buttons_per_row=4):
         super().__init__()
         self.notify_parent = notify_parent
 
@@ -179,7 +179,6 @@ class SystemStatusDisplay(QWidget):
         self.layout.addWidget(title)
 
         # Build row layouts for buttons/sliders (4 per row)
-        buttons_per_row = 4  # Adjusted layout alignment for toggle buttons
         row_layouts = []
         for _ in range((len(keys_labels) + buttons_per_row - 1) // buttons_per_row):
             row = QHBoxLayout()
@@ -200,16 +199,6 @@ class SystemStatusDisplay(QWidget):
 
         for row in row_layouts:
             self.layout.addLayout(row)
-
-        # # Chat-Box initialization 
-        # self.chat_box = QTextEdit()
-        # self.chat_box.setFixedHeight(260)
-        # self.chat_box.setReadOnly(True)
-        # self.chat_box.setStyleSheet(
-        #     "background-color: rgba(0, 0, 0, 0.8); color: white; "
-        #     "border-radius: 10px; padding: 10px; border: 2px solid #333;"
-        # )
-        # self.layout.addWidget(self.chat_box)
 
         # Timer for polling data and refreshing display
         self.timer = QTimer(self)
@@ -259,23 +248,17 @@ class SystemStatusDisplay(QWidget):
             if value == 1:
                 widget.set_color("red")
                 self.log_to_chat(f"[{timestamp}] {label} Error Detected!")
-             #   self.chat_box.append(f"[{timestamp}] {label} Error Detected!")
             elif value == 0:
                 widget.set_color("green")
-            #     self.chat_box.append(f"[{timestamp}] {label} :- OK")
             else:
                 widget.set_color("gray")
-                # self.chat_box.append(f"[{timestamp}] {label} Unknown State")
         else:
             # Always follow telemetry data for non-LEDs
             if value == 1:
                 widget.set_color("green")
-                # self.chat_box.append(f"[{timestamp}] -> {label} Sensor On ✅")
                 self.manual_resets[key] = True
             elif value == 0:
                 widget.set_color("red")
-                # self.log_to_chat(f"[{timestamp}] -> {label} Sensor Off ⛔")
-               # self.chat_box.append(f"[{timestamp}] -> {label} Sensor Off ⛔")
                 self.manual_resets[key] = False
 
         self.error_states[key] = value
@@ -298,32 +281,9 @@ class SystemStatusDisplay(QWidget):
             if w == widget:
                 label = [label for k, label in self.keys_labels if k == key][0]
                 timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-                # self.chat_box.append(f"[{timestamp}] {label}: State Cleared!")
                 self.error_states[key] = 0
                 self.manual_resets[key] = True
-      #          self.update_json_key(key, 0)
                 break
-
-    # # Appends message to chatbox with red highlight if error
-    # def log_to_chat(self, message):
-    #     # Max scroll value (at bottom)
-    #     max_scroll = self.chat_box.verticalScrollBar().maximum()
-    #     current_scroll = self.chat_box.verticalScrollBar().value()
-
-    #     if current_scroll >= max_scroll:
-    #         # User is at bottom — auto-clear if too long
-    #         if self.chat_box.document().blockCount() > 12:  # adjust threshold as needed
-    #             self.chat_box.clear()
-
-    #     ## Modified code 20250409
-    #     if "Off" in message or "⛔" in message:
-    #         self.chat_box.setTextColor(QColor("red"))
-    #     else:
-    #         self.chat_box.setTextColor(QColor("white"))
-
-    #     self.chat_box.append(message)
-    #     self.chat_box.setTextColor(QColor("white"))  # Reset to default
-
 
 class GradientSlider(QWidget):
     def __init__(self, min_val=0, max_val=100, scale=1, unit="", parent=None):
@@ -636,8 +596,6 @@ class MainWindow(QWidget):
 
        # Define all tab names and associated telemetry keys
        tab_definitions = [
-           ("EVA1 DCU", [(2, "Battery"), (3, "Oxygen"), (4, "Comm"), (5, "Fan"), (6, "Pump"), (7, "CO2")]),
-           ("EVA2 DCU", [(8, "Battery"), (9, "Oxygen"), (10, "Comm"), (11, "Fan"), (12, "Pump"), (13, "CO2")]),
            ("Error Tracking", [(14, "Fan"), (15, "Oxygen"), (16, "Pump")], True),
            ("Rock Yard Map", [(17, "EVA1 PosX"), (18, "EVA1 PosY"), (19, "EVA1 Heading"), 
                               (20, "EVA2 PosX"), (21, "EVA2 PosY"), (22, "EVA2 Heading"), 
@@ -647,8 +605,6 @@ class MainWindow(QWidget):
                               (29,"LTV POI 3 PosX"), (30,"LTV POI 3 PosY")]),
            ("EVA1 SPEC", [(31, "Spec ID"), (32, "SiO2"), (33, "TiO2"), (34, "Al2O3"), (35, "FeO"), (36, "MnO"),
                           (37, "MgO"), (38, "CaO"), (39, "K2O"), (40, "P2O3"), (41, "Other")]),
-           ("EVA2 SPEC", [(42, "Spec ID"), (43, "SiO2"), (44, "TiO2"), (45, "Al2O3"), (46, "FeO"), (47, "MnO"),
-                          (48, "MgO"), (49, "CaO"), (50, "K2O"), (51, "P2O3"), (52, "Other")]),
            ("UIA", [(53, "EVA1 Power"), (54, "EVA1 Oxy"), (55, "EVA1 Water Supply"), (56, "EVA1 Water Waste"),
                     (57, "EVA2 Power"), (58, "EVA2 Oxy"), (59, "EVA2 Water Supply"), (60, "EVA2 Water Waste"),
                     (61, "Oxy Vent"), (62, "Depress Pump")]) 
@@ -658,17 +614,27 @@ class MainWindow(QWidget):
        self.task_tracker_tab = TaskTracker()
        self.tabs.addTab(self.task_tracker_tab, "EVA Procedures") 
 
+       dcu_tab = self.create_dcu_tab()
+       self.tabs.addTab(dcu_tab, "DCU")
+       self.tab_labels.append("DCU")
+
        # Loop through all tab definitions and create appropriate tabs
        for name, keys, *use_leds in tab_definitions:
            use_led = use_leds[0] if use_leds else False
 
            # Make EVA1 SPEC and EVA2 SPEC use DonutChart 
-           if name in ["EVA1 SPEC", "EVA2 SPEC"]:
-               display = PieChartDisplay(f"🧪 {name} 🧪", keys)
-               self.displays.append(display)
-               self.tabs.addTab(display, name)
-               self.tab_labels.append(name)
+           if name == "EVA1 SPEC":
+               # Only call it once, to avoid duplicate creation
+               spec_tab = self.create_spec_tab()
+               self.tabs.addTab(spec_tab, "SPEC Analysis")
+               self.tab_labels.append("SPEC Analysis")
                continue
+            
+           if name == "DCU1":
+               dcu_tab = self.create_dcu_tab()
+               self.tabs.addTab(dcu_tab, "DCU")
+               self.tab_labels.append("DCU")
+               continue 
 
            # Map tab names to emoji icons
            icon_map = {
@@ -798,7 +764,7 @@ class MainWindow(QWidget):
         self.tab_labels.append("EVA2 TELEMETRY")
 
         # Third telemetry sub-tab
-        eva3_display = SystemStatusDisplay("📡 EVA TELEMETRY-3 📡", [
+        eva3_display = SystemStatusDisplay("📡 EVA1 TELEMETRY-3 📡", [
             (79, "Helmet Pressure CO2"),
             (80, "Scrubber A CO2 Storage"),
             (81, "Scrubber B CO2 Storage"),
@@ -807,9 +773,9 @@ class MainWindow(QWidget):
             (84, "Coolant Gas Pressure"),
             (85, "Coolant Liquid Pressure")
         ])
-        sub_tabs.addTab(eva3_display, "EVA TELEMETRY-3")
+        sub_tabs.addTab(eva3_display, "EVA1 TELEMETRY-3")
         self.displays.append(eva3_display)
-        self.tab_labels.append("EVA TELEMETRY-3")
+        self.tab_labels.append("EVA1 TELEMETRY-3")
 
         # Add sub-tabs to main telemetry layout
         layout.addWidget(sub_tabs)
@@ -875,7 +841,7 @@ class MainWindow(QWidget):
         self.tab_labels.append("EVA2 TELEMETRY-2")
 
         # Third telemetry sub-tab for EVA2
-        eva3_display = SystemStatusDisplay("📡 EVA TELEMETRY-3 📡", [
+        eva3_display = SystemStatusDisplay("📡 EVA2 TELEMETRY-3 📡", [
             (101, "Helmet Pressure CO2"),
             (102, "Scrubber A CO2 Storage"),
             (103, "Scrubber B CO2 Storage"),
@@ -884,7 +850,7 @@ class MainWindow(QWidget):
             (106, "Coolant Gas Pressure"),
             (107, "Coolant Liquid Pressure")
         ])
-        sub_tabs.addTab(eva3_display, "EVA TELEMETRY-3")
+        sub_tabs.addTab(eva3_display, "EVA2 TELEMETRY-3")
         self.displays.append((eva3_display, sub_tabs))
         self.tab_labels.append("EVA2 TELEMETRY-3")
 
@@ -946,6 +912,93 @@ class MainWindow(QWidget):
         # Add state tracking sub-tabs to layout
         layout.addWidget(sub_tabs)
         return container
+    
+    def create_dcu_tab(self):
+        container = QWidget()
+        layout = QVBoxLayout()
+        container.setLayout(layout)
+
+        # Styled frame to mimic a single-tab look
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame {
+                border: 2px solid white;
+                border-radius: 10px;
+                background-color: #1a1a1a;
+            }
+        """)
+        frame_layout = QHBoxLayout()  # Side-by-side EVA1 and EVA2
+        frame.setLayout(frame_layout)
+
+        # Create DCU widgets
+        eva1_dcu = SystemStatusDisplay("🔋 EVA1 DCU 🔋", [
+            (2, "Battery"), (3, "Oxygen"), (4, "Comm"),
+            (5, "Fan"), (6, "Pump"), (7, "CO2")
+        ], buttons_per_row=3)
+        eva2_dcu = SystemStatusDisplay("🔋 EVA2 DCU 🔋", [
+            (8, "Battery"), (9, "Oxygen"), (10, "Comm"),
+            (11, "Fan"), (12, "Pump"), (13, "CO2")
+        ], buttons_per_row=3)
+
+        self.displays.extend([eva1_dcu, eva2_dcu])
+
+        # Optional vertical separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setStyleSheet("color: white;")
+        
+        # Add widgets to frame
+        frame_layout.addWidget(eva1_dcu)
+        frame_layout.addWidget(separator)
+        frame_layout.addWidget(eva2_dcu)
+
+        # Add the framed layout to the main container
+        layout.addWidget(frame)
+        return container
+
+    def create_spec_tab(self):
+        container = QWidget()
+        layout = QVBoxLayout()
+        container.setLayout(layout)
+
+        # Styled frame to mimic a single-tab look
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame {
+                border: 2px solid white;
+                border-radius: 10px;
+                background-color: #1a1a1a;
+            }
+        """)
+        frame_layout = QHBoxLayout()  # Side-by-side EVA1 and EVA2
+        frame.setLayout(frame_layout)
+
+        eva1_spec = PieChartDisplay("🧪 EVA1 SPEC 🧪", [
+            (31, "Spec ID"), (32, "SiO2"), (33, "TiO2"), (34, "Al2O3"), (35, "FeO"), (36, "MnO"),
+            (37, "MgO"), (38, "CaO"), (39, "K2O"), (40, "P2O3"), (41, "Other")
+        ])
+        eva2_spec = PieChartDisplay("🧪 EVA2 SPEC 🧪", [
+            (42, "Spec ID"), (43, "SiO2"), (44, "TiO2"), (45, "Al2O3"), (46, "FeO"), (47, "MnO"),
+            (48, "MgO"), (49, "CaO"), (50, "K2O"), (51, "P2O3"), (52, "Other")
+        ])
+
+        self.displays.extend([eva1_spec, eva2_spec])
+
+        # Optional vertical separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setStyleSheet("color: white;")
+        
+        # Add widgets to frame
+        frame_layout.addWidget(eva1_spec)
+        frame_layout.addWidget(separator)
+        frame_layout.addWidget(eva2_spec)
+
+        layout.addWidget(frame)
+        return container
+
 
     # Placeholder method to check tab statuses - consider removing in final code
     def check_tab_statuses(self):
@@ -961,7 +1014,7 @@ class MainWindow(QWidget):
             tab_label = self.tabs.tabText(i)
 
             # Skip EVA1 TELEMETRY tab from blinking
-            if tab_label in ["EVA1 DCU","EVA2 DCU", "UIA","EVA States"]: # Change if you need some blinking red (Richard G) 
+            if tab_label in ["DCU", "UIA","EVA States"]: # Change if you need some blinking red (Richard G) 
                 tab_bar.setTabTextColor(i, QColor("white"))
                 continue
 

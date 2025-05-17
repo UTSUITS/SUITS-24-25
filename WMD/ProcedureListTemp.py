@@ -12,7 +12,7 @@ class TaskTracker(QWidget):
         super().__init__()
 
         self.setWindowTitle("EVA Procedures Tracker")
-        self.setFixedSize(1100, 600) 
+        self.setFixedSize(1000, 550) 
 
         dark_palette = QPalette()
         dark_palette.setColor(QPalette.ColorRole.Window, QColor("#121212"))
@@ -246,7 +246,33 @@ class TaskTracker(QWidget):
         if self.current_task_index[tab_idx] == len(tasks):
             self.tabs.tabBar().setTabTextColor(tab_idx, QColor("#00ff00"))
             self.proc_complete_buttons[tab_idx].setEnabled(False)
-            QMessageBox.information(self, "Completed", f"Procedure '{self.tabs.tabText(tab_idx)}' completed!")
+        
+            # Create a custom message box with dark background and light text
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Completed")
+            msg_box.setText(f"Procedure '{self.tabs.tabText(tab_idx)}' completed!")
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #121212;
+                    color: white;
+                    font-size: 14pt;
+                }
+                QLabel {
+                    color: white;
+                    font-size: 14pt;
+                }
+                QPushButton {
+                    background-color: #444;
+                    color: white;
+                    padding: 6px 12px;
+                    font-size: 12pt;
+                }
+                QPushButton:hover {
+                    background-color: #666;
+                }
+            """)
+            msg_box.exec()
+            
 
             next_tab = next(
                 (i for i in range(tab_idx + 1, self.tabs.count())
