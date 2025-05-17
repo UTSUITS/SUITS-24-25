@@ -65,7 +65,7 @@ class CamHandler(BaseHTTPRequestHandler):
                         <img src="/stream.mjpg" width="640" height="480" />
                         <h2>Controls</h2>
                         <a href="/photo" class="button">Take Photo</a><br>
-                        {"<a href=\"/video?record=false\" class=\"button\">Stop Recording</a>" if is_recording else f"<a href=\"/video?record=true\" class=\"button\">{recording_text}</a>"}
+                        {'<a href="/video?record=false" class="button">Stop Recording</a>' if is_recording else f'<a href="/video?record=true" class="button">{recording_text}</a>'}
                     </div>
                     <div class="right-panel">
                         <h2>Saved Files</h2>
