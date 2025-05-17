@@ -25,7 +25,7 @@ recording_thread = None
 
 class CamHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        global is_recording
+        global is_recording, recording_thread
 
         parsed_path = urlparse(self.path)
         path = parsed_path.path
