@@ -1,4 +1,3 @@
-import io
 import os
 import glob
 import time
@@ -8,14 +7,14 @@ from datetime import datetime
 from urllib.parse import parse_qs
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import socketserver
-import cv2
+# import cv2  # Commented out OpenCV webcam use
 from PIL import Image
 
-# For PiCamera2
+# PiCamera2 imports for Pi use
 from picamera2 import Picamera2, Preview
 from libcamera import Transform
 
-PAGE = '''...'''  # [Omitted here for brevity; use your full PAGE HTML from before]
+PAGE = '''...'''  # unchanged HTML
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -40,18 +39,21 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 while True:
                     frame = picam2.capture_array()
 
-                    # Add timestamp and blinking dot to stream
                     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     elapsed = time.time() - stream_start
                     elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
                     blink_on = int(time.time() * 2) % 2 == 0
-                    if blink_on:
-                        cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
-                    cv2.putText(frame, f"Time: {now_str}", (50, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                    cv2.putText(frame, f"Live: {elapsed_str}", (50, 55),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
+                    # Add annotations
+                    if blink_on:
+                        import cv2
+                        cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
+                        cv2.putText(frame, f"Time: {now_str}", (50, 30),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        cv2.putText(frame, f"Live: {elapsed_str}", (50, 55),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+                    import cv2
                     _, jpeg = cv2.imencode('.jpg', frame)
                     self.wfile.write(b'--FRAME\r\n')
                     self.send_header('Content-Type', 'image/jpeg')
@@ -80,6 +82,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f'media/{filename or "photo_" + timestamp}.jpg'
             frame = picam2.capture_array()
+            import cv2
             cv2.imwrite(filename, frame)
         elif self.path == '/video':
             action = fields.get('action', [''])[0]
@@ -88,6 +91,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             if action == 'start' and not recording:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 video_name = f'media/{name or "video_" + timestamp}.avi'
+                import cv2
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 video_writer = cv2.VideoWriter(video_name, fourcc, 24.0, (640, 480))
                 recording_start = time.time()
@@ -106,12 +110,13 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 # Setup folder
 os.makedirs('media', exist_ok=True)
 
-# Initialize PiCamera2
+# ==== Raspberry Pi camera setup ====
 picam2 = Picamera2()
 picam2.configure(picam2.create_video_configuration(main={"size": (640, 480)}))
 picam2.start()
+# ===================================
 
-# Commented out for Pi version
+# Commented out OpenCV laptop webcam setup
 # camera = cv2.VideoCapture(0)
 
 recording = False
@@ -127,12 +132,15 @@ def recording_loop():
             elapsed = time.time() - recording_start
             elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
             blink_on = int(time.time() * 2) % 2 == 0
+
+            import cv2
             if blink_on:
                 cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
             cv2.putText(frame, f"Time: {now_str}", (50, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             cv2.putText(frame, f"Recording: {elapsed_str}", (50, 55),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
             video_writer.write(frame)
         time.sleep(1/24)
 
@@ -145,6 +153,6 @@ try:
     print("Starting EV1 camera server on port 8000...")
     server.serve_forever()
 finally:
-    # camera.release()  # Commented out, not using OpenCV camera
+    # camera.release()  # not used on Pi
     if video_writer:
         video_writer.release()
