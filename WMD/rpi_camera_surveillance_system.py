@@ -67,7 +67,36 @@ PAGE = '''
         li {{
             padding: 5px;
         }}
+        .recording-dot {{
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: red;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+            margin-left: 10px;
+        }}
+        @keyframes blink {{
+            0%, 50%, 100% {{ opacity: 1; }}
+            25%, 75% {{ opacity: 0; }}
+        }}
     </style>
+    <script>
+        async function checkRecording() {{
+            try {{
+                const res = await fetch('/status');
+                const data = await res.json();
+                const dot = document.getElementById('recording-dot');
+                if (dot) {{
+                    dot.style.display = data.recording ? 'inline-block' : 'none';
+                }}
+            }} catch (e) {{
+                console.error(e);
+            }}
+        }}
+        setInterval(checkRecording, 1000);
+    </script>
 </head>
 <body>
     <div class="left">
@@ -82,6 +111,7 @@ PAGE = '''
             <input type="text" name="filename" placeholder="Video name (optional)" />
             <button type="submit" name="action" value="start">Start Video</button>
             <button type="submit" name="action" value="stop">Stop Video</button>
+            <span id="recording-dot" class="recording-dot" style="display:none;"></span>
         </form>
     </div>
     <div class="right">
@@ -93,7 +123,6 @@ PAGE = '''
 </body>
 </html>
 '''
-
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -113,11 +142,25 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_header('Pragma', 'no-cache')
             self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
             self.end_headers()
+            stream_start = time.time()
             try:
                 while True:
                     ret, frame = camera.read()
                     if not ret:
                         continue
+
+                    # Add timestamp and blinking dot to stream
+                    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    elapsed = time.time() - stream_start
+                    elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
+                    blink_on = int(time.time() * 2) % 2 == 0
+                    if blink_on:
+                        cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
+                    cv2.putText(frame, f"Time: {now_str}", (50, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    cv2.putText(frame, f"Live: {elapsed_str}", (50, 55),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
                     _, jpeg = cv2.imencode('.jpg', frame)
                     self.wfile.write(b'--FRAME\r\n')
                     self.send_header('Content-Type', 'image/jpeg')
@@ -128,6 +171,11 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                     time.sleep(1/24)
             except Exception as e:
                 print('Removed streaming client:', self.client_address, str(e))
+        elif self.path == '/status':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(('{"recording": ' + ('true' if recording else 'false') + '}').encode())
         else:
             self.send_error(404)
             self.end_headers()
@@ -146,12 +194,13 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         elif self.path == '/video':
             action = fields.get('action', [''])[0]
             name = fields.get('filename', [''])[0].strip()
-            global recording, video_writer
+            global recording, video_writer, recording_start
             if action == 'start' and not recording:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 video_name = f'media/{name or "video_" + timestamp}.avi'
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 video_writer = cv2.VideoWriter(video_name, fourcc, 24.0, (640, 480))
+                recording_start = time.time()
                 recording = True
             elif action == 'stop' and recording:
                 recording = False
@@ -175,6 +224,7 @@ os.makedirs('media', exist_ok=True)
 camera = cv2.VideoCapture(0)
 
 recording = False
+recording_start = None
 video_writer = None
 
 def recording_loop():
@@ -183,6 +233,16 @@ def recording_loop():
         if recording:
             ret, frame = camera.read()
             if ret:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                elapsed = time.time() - recording_start
+                elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
+                blink_on = int(time.time() * 2) % 2 == 0
+                if blink_on:
+                    cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
+                cv2.putText(frame, f"Time: {now_str}", (50, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(frame, f"Recording: {elapsed_str}", (50, 55),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 video_writer.write(frame)
         time.sleep(1/24)
 
