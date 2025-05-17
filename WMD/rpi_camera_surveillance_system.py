@@ -25,7 +25,7 @@ recording_thread = None
 
 class CamHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        global is_recording, recording_thread
+        global is_recording, recording_thread  # Only here once, at top of method
 
         parsed_path = urlparse(self.path)
         path = parsed_path.path
@@ -37,7 +37,6 @@ class CamHandler(BaseHTTPRequestHandler):
         )
 
         recording_text = "Start Recording"
-
         if is_recording:
             recording_text = "Recording..."
 
@@ -127,7 +126,6 @@ class CamHandler(BaseHTTPRequestHandler):
             try:
                 while True:
                     frame = picam2.capture_array()
-                    # The captured frame is RGB; convert to BGR for OpenCV compatibility
                     frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                     _, jpeg = cv2.imencode('.jpg', frame_bgr)
                     self.wfile.write(b"--jpgboundary\r\n")
@@ -149,7 +147,7 @@ class CamHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
         elif path == "/video":
-            global is_recording, recording_thread
+            # Removed global here; already declared above
             if "record" in query:
                 record = query["record"][0].lower() == "true"
                 if record and not is_recording:
