@@ -45,76 +45,37 @@ class CamHandler(BaseHTTPRequestHandler):
 
             # Dark mode UI with buttons and saved files on right side
             html = f"""
-                <html>
-                <head>
-                    <title>Pi Camera Stream</title>
-                    <style>
-                        body {{
-                            background-color: #121212;
-                            color: #eee;
-                            font-family: Arial, sans-serif;
-                            margin: 0; padding: 0;
-                        }}
-                        .container {{
-                            display: flex;
-                            height: 100vh;
-                        }}
-                        .left-panel {{
-                            flex: 2;
-                            padding: 20px;
-                        }}
-                        .right-panel {{
-                            flex: 1;
-                            padding: 20px;
-                            background-color: #1e1e1e;
-                            overflow-y: auto;
-                            border-left: 1px solid #333;
-                        }}
-                        h1, h2 {{
-                            color: #fff;
-                        }}
-                        a.button {{
-                            display: inline-block;
-                            margin: 10px 10px 10px 0;
-                            padding: 10px 20px;
-                            background-color: #2d89ef;
-                            color: white;
-                            text-decoration: none;
-                            border-radius: 5px;
-                            font-weight: bold;
-                            user-select: none;
-                        }}
-                        a.button:hover {{
-                            background-color: #1b5fbd;
-                        }}
-                        a.button.recording {{
-                            background-color: #e53935;
-                            pointer-events: none;
-                            cursor: default;
-                        }}
-                        img {{
-                            border: 3px solid #2d89ef;
-                            border-radius: 8px;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="left-panel">
-                            <h1>Pi Camera Live Stream</h1>
-                            <img src="/stream.mjpg" width="640" height="480" />
-                            <h2>Controls</h2>
-                            <a href="/photo" class="button">Take Photo</a><br>
-                            {"<a href=\"/video?record=false\" class=\"button\">Stop Recording</a>" if is_recording else f"<a href=\"/video?record=true\" class=\"button\">{recording_text}</a>"}
-                        </div>
-                        <div class="right-panel">
-                            <h2>Saved Files</h2>
-                            {file_links if files else "<p>No files saved yet.</p>"}
-                        </div>
+            <html>
+            <head>
+                <title>Pi Camera Stream</title>
+                <style>
+                    body {{
+                        background-color: #121212;
+                        color: #eee;
+                        font-family: Arial, sans-serif;
+                        margin: 0; padding: 0;
+                    }}
+                    /* other styles */
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="left-panel">
+                        <h1>Pi Camera Live Stream</h1>
+                        <img src="/stream.mjpg" width="640" height="480" />
+                        <h2>Controls</h2>
+                        <a href="/photo" class="button">Take Photo</a><br>
+                        {"<a href=\"/video?record=false\" class=\"button\">Stop Recording</a>" if is_recording else f"<a href=\"/video?record=true\" class=\"button\">{recording_text}</a>"}
                     </div>
-                </body>
-                </html>
+                    <div class="right-panel">
+                        <h2>Saved Files</h2>
+                        {file_links if files else "<p>No files saved yet.</p>"}
+                    </div>
+                </div>
+            </body>
+            </html>
             """
+
             self.wfile.write(html.encode("utf-8"))
 
         elif path == "/stream.mjpg":
