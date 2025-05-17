@@ -22,16 +22,16 @@ os.makedirs(output_dir, exist_ok=True)
 
 is_recording = False
 recording_thread = None
-stop_event = threading.Event()
 
 class CamHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        global is_recording, recording_thread, stop_event
+        global is_recording, recording_thread
 
         parsed_path = urlparse(self.path)
         path = parsed_path.path
         query = parse_qs(parsed_path.query)
 
+        # Handle rename GET page
         if path == "/rename":
             file_to_rename = query.get("file", [""])[0]
             if not file_to_rename or not os.path.exists(os.path.join(output_dir, file_to_rename)):
@@ -43,7 +43,22 @@ class CamHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            html = f"""..."""  # [UI unchanged for brevity]
+
+            html = f"""
+            <html>
+            <head><title>Rename File</title></head>
+            <body style="background:#121212;color:#eee;font-family:Arial;padding:20px;">
+                <h1>Rename File: {file_to_rename}</h1>
+                <form method="POST" action="/rename">
+                    <input type="hidden" name="oldname" value="{file_to_rename}">
+                    <label for="newname">New filename:</label><br>
+                    <input type="text" id="newname" name="newname" value="{file_to_rename}" style="width:300px;padding:5px;font-size:16px;"><br><br>
+                    <input type="submit" value="Rename" style="padding:10px 20px;font-size:16px;">
+                </form>
+                <br><a href="/">Back to main page</a>
+            </body>
+            </html>
+            """
             self.wfile.write(html.encode("utf-8"))
             return
 
@@ -62,20 +77,98 @@ class CamHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html")
             self.end_headers()
 
-            html = f"""..."""  # [UI unchanged for brevity]
+            html = f"""
+                <html>
+                <head>
+                    <title>Pi Camera Stream</title>
+                    <style>
+                        body {{
+                            background-color: #121212;
+                            color: #eee;
+                            font-family: Arial, sans-serif;
+                            margin: 0; padding: 0;
+                        }}
+                        .container {{
+                            display: flex;
+                            height: 100vh;
+                        }}
+                        .left-panel {{
+                            flex: 2;
+                            padding: 20px;
+                        }}
+                        .right-panel {{
+                            flex: 1;
+                            padding: 20px;
+                            background-color: #1e1e1e;
+                            overflow-y: auto;
+                            border-left: 1px solid #333;
+                        }}
+                        h1, h2 {{
+                            color: #fff;
+                        }}
+                        a.button {{
+                            display: inline-block;
+                            margin: 10px 10px 10px 0;
+                            padding: 10px 20px;
+                            background-color: #2d89ef;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 5px;
+                            font-weight: bold;
+                            user-select: none;
+                        }}
+                        a.button:hover {{
+                            background-color: #1b5fbd;
+                        }}
+                        a.button.recording {{
+                            background-color: #e53935;
+                            pointer-events: none;
+                            cursor: default;
+                        }}
+                        img {{
+                            border: 3px solid #2d89ef;
+                            border-radius: 8px;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="left-panel">
+                            <h1>Pi Camera Live Stream</h1>
+                            <img src="/stream.mjpg" width="640" height="480" />
+                            <h2>Controls</h2>
+                            <a href="/photo" class="button">Take Photo</a><br>
+                            {'<a href="/video?record=false" class="button recording">Stop Recording</a>' if is_recording else f'<a href="/video?record=true" class="button">{recording_text}</a>'}
+                        </div>
+                        <div class="right-panel">
+                            <h2>Saved Files</h2>
+                            {file_links if files else "<p>No files saved yet.</p>"}
+                        </div>
+                    </div>
+                </body>
+                </html>
+            """
             self.wfile.write(html.encode("utf-8"))
 
         elif path == "/stream.mjpg":
             self.send_response(200)
             self.send_header("Content-type", "multipart/x-mixed-replace; boundary=--jpgboundary")
             self.end_headers()
+
             try:
                 while True:
                     frame = picam2.capture_array()
                     frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+                    # Add timestamp overlay on the frame
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    cv2.putText(frame_bgr, timestamp, (10, frame_bgr.shape[0] - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    cv2.putText(
+                        frame_bgr, timestamp,
+                        (10, frame_bgr.shape[0] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (0, 255, 255), 2
+                    )
+
                     _, jpeg = cv2.imencode('.jpg', frame_bgr)
                     self.wfile.write(b"--jpgboundary\r\n")
                     self.send_header("Content-type", "image/jpeg")
@@ -100,14 +193,11 @@ class CamHandler(BaseHTTPRequestHandler):
                 record = query["record"][0].lower() == "true"
                 if record and not is_recording:
                     is_recording = True
-                    stop_event.clear()
                     recording_thread = threading.Thread(target=self.recording_loop)
                     recording_thread.start()
                 elif not record and is_recording:
                     is_recording = False
-                    stop_event.set()
-                    if recording_thread is not None:
-                        recording_thread.join()
+                    # No join here; just signal thread to stop
             self.send_response(303)
             self.send_header("Location", "/")
             self.end_headers()
@@ -116,6 +206,7 @@ class CamHandler(BaseHTTPRequestHandler):
             filepath = path.lstrip("/")
             if os.path.exists(filepath):
                 self.send_response(200)
+                # Send correct MIME for jpg and avi
                 if filepath.lower().endswith(".jpg"):
                     self.send_header("Content-type", "image/jpeg")
                 elif filepath.lower().endswith(".avi"):
@@ -138,6 +229,7 @@ class CamHandler(BaseHTTPRequestHandler):
             oldname = params.get("oldname", [""])[0]
             newname = params.get("newname", [""])[0].strip()
 
+            # Basic sanitize newname: prevent path traversal and empty names
             if not newname or "/" in newname or "\\" in newname or newname.startswith("."):
                 self.send_response(400)
                 self.end_headers()
@@ -160,6 +252,7 @@ class CamHandler(BaseHTTPRequestHandler):
                 return
 
             os.rename(oldpath, newpath)
+
             self.send_response(303)
             self.send_header("Location", "/")
             self.end_headers()
@@ -168,14 +261,14 @@ class CamHandler(BaseHTTPRequestHandler):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         filename = os.path.join(output_dir, f"video_{int(time.time())}.avi")
         out = cv2.VideoWriter(filename, fourcc, 20.0, (640, 480))
-        print(f"[INFO] Started recording to {filename}")
-        while not stop_event.is_set():
+
+        while is_recording:
             frame = picam2.capture_array()
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             out.write(frame_bgr)
             time.sleep(0.05)
+
         out.release()
-        print(f"[INFO] Finished recording to {filename}")
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
@@ -183,13 +276,15 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 def run(server_class=ThreadedHTTPServer, handler_class=CamHandler, port=8000):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f"Server started on http://localhost:{port}")
+    print(f"Server started at http://localhost:{port}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
-    httpd.server_close()
-    print("Server stopped.")
+    finally:
+        print("\nShutting down server.")
+        picam2.stop()
+        httpd.server_close()
 
 if __name__ == "__main__":
     run()
