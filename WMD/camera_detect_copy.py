@@ -3,7 +3,8 @@ import os
 import time
 import threading
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QSizePolicy, QHBoxLayout, QStackedLayout
+    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel,
+    QSizePolicy, QHBoxLayout
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
@@ -16,30 +17,43 @@ import cv2
 
 shared_picam2 = Picamera2()
 
+
 class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
 
+        # Main camera feed
         self.label = QLabel("Camera feed will appear here")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setFixedSize(640, 480)
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.layout.addWidget(self.label)
 
-        # Thumbnail preview
+        # Thumbnail preview + filename
         self.thumbnail = QLabel()
         self.thumbnail.setFixedSize(100, 75)
         self.thumbnail.setStyleSheet("border: 2px solid gray;")
-        self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.thumbnail.setVisible(False)
 
-        # Container for video + thumbnail
-        camera_frame = QWidget()
-        camera_layout = QStackedLayout(camera_frame)
-        camera_layout.addWidget(self.label)
-        camera_layout.addWidget(self.thumbnail)
-        self.layout.addWidget(camera_frame)
+        self.filename_label = QLabel("")
+        self.filename_label.setStyleSheet("color: gray; font-size: 10pt;")
+        self.filename_label.setVisible(False)
+
+        # Organize thumbnail + filename vertically
+        thumb_layout = QVBoxLayout()
+        thumb_layout.addWidget(self.thumbnail, alignment=Qt.AlignmentFlag.AlignCenter)
+        thumb_layout.addWidget(self.filename_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        thumb_widget = QWidget()
+        thumb_widget.setLayout(thumb_layout)
+
+        # Layout main feed and thumbnail horizontally
+        top_row = QHBoxLayout()
+        top_row.addWidget(self.label)
+        top_row.addWidget(thumb_widget)
+        self.layout.addLayout(top_row)
 
         # Buttons
         self.button = QPushButton("Start Camera")
@@ -74,7 +88,7 @@ class CameraTab(QWidget):
         """)
         self.capture_button.clicked.connect(self.capture_photo)
 
-        # Layout buttons at bottom
+        # Bottom layout for buttons
         self.layout.addStretch(1)
         bottom_row = QHBoxLayout()
         bottom_row.addWidget(self.button, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -82,15 +96,14 @@ class CameraTab(QWidget):
         bottom_row.addStretch(1)
         self.layout.addLayout(bottom_row)
 
-        self.setLayout(self.layout)
-
+        # Timer for video updates
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
 
         self.camera_running = False
         self.http_thread = None
 
-        # Ensure image directory exists
+        # Image save directory
         self.image_dir = os.path.join(os.getcwd(), "WMD/captures")
         os.makedirs(self.image_dir, exist_ok=True)
 
@@ -120,13 +133,14 @@ class CameraTab(QWidget):
         if shared_picam2:
             frame = shared_picam2.capture_array()
 
-            # Add timestamp overlay
+            # Timestamp overlay
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
             cv2.putText(
                 frame, timestamp, (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA
             )
 
+            # Convert and show
             frame_rgb = frame[..., ::-1]
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
@@ -144,12 +158,14 @@ class CameraTab(QWidget):
             Image.fromarray(frame).save(full_path)
             print(f"Saved: {full_path}")
 
-            # Show thumbnail
+            # Update thumbnail and label
             thumb = QPixmap(full_path).scaled(self.thumbnail.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.thumbnail.setPixmap(thumb)
             self.thumbnail.setVisible(True)
 
-            # Flash white overlay
+            self.filename_label.setText(filename)
+            self.filename_label.setVisible(True)
+
             self.flash_effect()
 
     def flash_effect(self):
