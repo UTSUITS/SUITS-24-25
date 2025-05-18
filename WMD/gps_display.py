@@ -7,21 +7,17 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
-from Compass.QMC_test import get_bearing  
+from Compass.QMC_test import get_bearing  # Update to your actual heading sensor
 
-# Uncomment below to use actual GPSD connection
-# import gps
-
-# --- Simulated GPS data classes for testing without GPSD ---
+# Simulated GPS classes for testing
 class SimulatedGPSFix:
     def __init__(self):
         self.latitude = 37.7749
         self.longitude = -122.4194
-        self.speed = 0.0  # meters/sec
-        self.track = 0.0  # degrees
+        self.speed = 0.0
+        self.track = 0.0
 
     def update(self):
-        # Simulate GPS position and movement
         self.latitude += 0.0001
         self.longitude += 0.0001
         self.speed = (self.speed + 0.1) % 20
@@ -35,7 +31,7 @@ class SimulatedGPSD:
 
 class GpsPoller(threading.Thread):
     def __init__(self, gpsd):
-        threading.Thread.__init__(self)
+        super().__init__()
         self.gpsd = gpsd
         self.running = True
 
@@ -45,8 +41,7 @@ class GpsPoller(threading.Thread):
             time.sleep(0.1)
 
 
-# --- Widgets ---
-
+# Compass with rotating rose
 class CompassWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -62,23 +57,45 @@ class CompassWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Background white circle
+        size = min(self.width(), self.height())
+        center = QPointF(self.width() / 2, self.height() / 2)
+
+        # Draw background
         painter.setBrush(QColor("white"))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(0, 0, self.width(), self.height())
+        painter.drawEllipse(0, 0, size, size)
 
-        # Draw compass needle in dark gray
+        painter.translate(center)
+
+        # Draw rotating compass rose
+        painter.save()
+        painter.rotate(-self.angle)  # Rotate rose based on heading
+
+        directions = ['N', 'E', 'S', 'W']
+        for i, d in enumerate(directions):
+            angle = i * 90
+            radians = angle * 3.14159 / 180
+            x = 0
+            y = -size * 0.4
+            painter.save()
+            painter.rotate(angle)
+            painter.setPen(QColor("black"))
+            font = QFont("Arial", 10, QFont.Weight.Bold)
+            painter.setFont(font)
+            painter.drawText(-5, int(y), d)
+            painter.restore()
+
+        painter.restore()
+
+        # Draw needle (static up)
         painter.setPen(QPen(QColor("#222222"), 3))
         painter.setBrush(QColor("#222222"))
 
-        painter.translate(self.width() / 2, self.height() / 2)
-        painter.rotate(self.angle)
-
         needle_path = [
-            QPointF(0, -self.height() * 0.4),
-            QPointF(-10, 0),
-            QPointF(0, -10),
-            QPointF(10, 0),
+            QPointF(0, -size * 0.4),
+            QPointF(-6, 0),
+            QPointF(0, -6),
+            QPointF(6, 0),
         ]
         painter.drawPolygon(*needle_path)
 
@@ -98,18 +115,15 @@ class SpeedometerWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Background white circle
         painter.setBrush(QColor("white"))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(0, 0, self.width(), self.height())
 
         center = self.width() / 2, self.height() / 2
 
-        # Draw speed arc in dark gray (from 45 to 135 degrees)
         painter.setPen(QPen(QColor("#222222"), 5))
         painter.drawArc(10, 10, self.width() - 20, self.height() - 20, 45 * 16, 90 * 16)
 
-        # Draw needle according to speed (0-20 m/s)
         painter.setPen(QPen(QColor("#222222"), 3))
         painter.translate(*center)
 
@@ -122,7 +136,6 @@ class BreadcrumbMapWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.breadcrumbs = []
-
         self.setMinimumSize(400, 400)
         self.setStyleSheet("background-color: #222222;")
 
@@ -162,8 +175,7 @@ class BreadcrumbMapWidget(QWidget):
 
         points = [map_point(lat, lon) for lat, lon in self.breadcrumbs]
 
-        pen = QPen(QColor("white"), 2)
-        painter.setPen(pen)
+        painter.setPen(QPen(QColor("white"), 2))
         for i in range(len(points) - 1):
             painter.drawLine(points[i], points[i + 1])
 
@@ -178,13 +190,6 @@ class GpsWidget(QWidget):
         self.setWindowTitle("GPS Dashboard")
         self.setStyleSheet("background-color: #000000;")
 
-        # Real GPSD connection (commented out for now)
-        # self.gpsd = gps.gps(host="localhost", port=2947)
-        # self.gpsd.stream(gps.WATCH_ENABLE | gps.WATCH_NEWSTYLE)
-        # self.gpsp = GpsPoller(self.gpsd)
-        # self.gpsp.start()
-
-        # Using simulated GPS data for testing
         self.gpsd = SimulatedGPSD()
         self.gpsp = GpsPoller(self.gpsd)
         self.gpsp.start()
@@ -193,7 +198,7 @@ class GpsWidget(QWidget):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_display)
-        self.timer.start(5)
+        self.timer.start(100)
 
         self.breadcrumb_running = False
 
@@ -209,8 +214,6 @@ class GpsWidget(QWidget):
         self.lat_label = QLabel("Latitude: ---")
         self.lon_label = QLabel("Longitude: ---")
         self.speed_label = QLabel("Speed: --- m/s")
-        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.speed_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
         self.bearing_label = QLabel("Bearing: ---°")
 
         for widget in [self.lat_label, self.lon_label, self.speed_label, self.bearing_label]:
@@ -265,19 +268,14 @@ class GpsWidget(QWidget):
 
         self.lat_label.setText(f"Latitude: {lat:.6f}")
         self.lon_label.setText(f"Longitude: {lon:.6f}")
-        self.speed_label.setText(f"Speed: {speed:.2f} m/s")
+        self.speed_label.setText(f"Speed: {speed:.1f} m/s")
         self.bearing_label.setText(f"Bearing: {bearing:.1f}°")
 
-        self.compass.setAngle(bearing)
         self.speedometer.setSpeed(speed)
+        self.compass.setAngle(bearing)
 
-        if self.breadcrumb_running and lat is not None and lon is not None:
+        if self.breadcrumb_running:
             self.breadcrumb_map.add_breadcrumb(lat, lon)
-
-    def closeEvent(self, event):
-        self.gpsp.running = False
-        self.gpsp.join()
-        event.accept()
 
 
 if __name__ == "__main__":

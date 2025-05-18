@@ -16,7 +16,7 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 # from camera_detect import CameraTab
-from camera_detect_copy import CameraTab 
+# from camera_detect_copy import CameraTab # Uncomment for camera
 
 import numpy as np
 
@@ -698,9 +698,9 @@ class MainWindow(QWidget):
        self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
        self.tab_labels.append("Rock Yard Map")
 
-       # CAMERA TAB 
-       self.camera_tab = CameraTab()
-       self.tabs.addTab(self.camera_tab, "Camera")
+       # CAMERA TAB # Uncomment for camera
+    #    self.camera_tab = CameraTab()
+    #    self.tabs.addTab(self.camera_tab, "Camera")
 
        self.layout.addWidget(self.tabs)
 

@@ -42,6 +42,12 @@ class TaskTracker(QWidget):
         """)
         left_side.addWidget(self.tabs)
 
+        self.subtab_indices = {
+            0: 0,  # Egress: default to first subtask group
+            1: 0,  # Navigation & Sampling
+            2: 0   # Ingress
+        }
+
         self.task_groups = {
             "Egress": {
                 "Connect UIA to DCU and Start Depress": [
@@ -146,6 +152,8 @@ class TaskTracker(QWidget):
         self.task_step_indices = {}  # (tab_idx, subtask_idx): current step
         self.render_functions = {}
 
+        self.step_history = {tab_idx: [] for tab_idx in range(len(self.task_groups))}
+        
         for tab_idx, (tab_name, tasks) in enumerate(self.task_groups.items()):
             tab_widget = QWidget()
             tab_layout = QVBoxLayout(tab_widget)
@@ -157,10 +165,8 @@ class TaskTracker(QWidget):
 
             def render_task(tab_idx, task_display_layout=task_display_layout):
                 # Clear previous contents
-                while task_display_layout.count():
-                    child = task_display_layout.takeAt(0)
-                    if child.widget():
-                        child.widget().deleteLater()
+                self.clear_layout(task_display_layout)
+
 
                 group = list(self.task_groups.items())[tab_idx][1]
                 task_names = list(group.keys())
@@ -184,13 +190,51 @@ class TaskTracker(QWidget):
                     task_display_layout.addWidget(label)
 
                 # Buttons
+                button_layout = QHBoxLayout()
+
+                # No need to store this unless you're manipulating them elsewhere
                 complete_button = QPushButton("Mark Step Complete")
+                complete_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #28a745;
+                        color: white;
+                        font-size: 14pt;
+                        padding: 10px 20px;
+                        border-radius: 10px;
+                    }
+                    QPushButton:hover {
+                        background-color: #218838;
+                    }
+                    QPushButton:pressed {
+                        background-color: #1e7e34;
+                    }
+                """)
+                complete_button.setMinimumHeight(40)
                 complete_button.clicked.connect(lambda: self.mark_step_complete(tab_idx))
-                task_display_layout.addWidget(complete_button)
+                button_layout.addWidget(complete_button)
 
                 undo_button = QPushButton("Undo Last Step")
+                undo_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #dc3545;
+                        color: white;
+                        font-size: 14pt;
+                        padding: 10px 20px;
+                        border-radius: 10px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c82333;
+                    }
+                    QPushButton:pressed {
+                        background-color: #bd2130;
+                    }
+                """)
+                undo_button.setMinimumHeight(40)
                 undo_button.clicked.connect(lambda: self.undo_last_task(tab_idx))
-                task_display_layout.addWidget(undo_button)
+                button_layout.addWidget(undo_button)
+
+                task_display_layout.addLayout(button_layout)
+
 
             # Save reference
             self.render_functions[tab_idx] = render_task
@@ -348,6 +392,16 @@ class TaskTracker(QWidget):
     def sync_tab_list_selection(self, index):
         self.tab_list_widget.setCurrentRow(index)
 
+    def clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            child_layout = item.layout()
+            if widget is not None:
+                widget.deleteLater()
+            elif child_layout is not None:
+                self.clear_layout(child_layout)
+
     def mark_step_complete(self, tab_idx):
         task_group = list(self.task_groups.items())[tab_idx][1]
         subtask_idx = self.current_task_indices[tab_idx]
@@ -356,9 +410,18 @@ class TaskTracker(QWidget):
         key = (tab_idx, subtask_idx)
 
         current_step = self.task_step_indices.get(key, 0)
+
+        # ✅ Log current step to step_history
+        if tab_idx not in self.step_history:
+            self.step_history[tab_idx] = []
+        self.step_history[tab_idx].append((tab_idx, subtask_idx, current_step))
+
         if current_step + 1 < len(steps):
             self.task_step_indices[key] = current_step + 1
         else:
+            # ✅ Highlight the completed subtask
+            self.highlight_task_complete(tab_idx, subtask_idx)
+
             # Move to next subtask or next tab
             if subtask_idx + 1 < len(task_keys):
                 self.current_task_indices[tab_idx] += 1
@@ -367,17 +430,33 @@ class TaskTracker(QWidget):
                 if tab_idx + 1 < self.tabs.count():
                     self.tabs.setCurrentIndex(tab_idx + 1)
                 return
+
         self.render_functions[tab_idx](tab_idx)
+
 
     def undo_last_task(self, tab_idx):
-        task_group = list(self.task_groups.items())[tab_idx][1]
-        subtask_idx = self.current_task_indices[tab_idx]
-        key = (tab_idx, subtask_idx)
-        current_step = self.task_step_indices.get(key, 0)
-        if current_step > 0:
-            self.task_step_indices[key] = current_step - 1
+        if not self.step_history[tab_idx]:
+            QMessageBox.information(self, "Undo", "No previous steps to undo.")
+            return
+    
+        # Get the last recorded step
+        last_tab_idx, last_subtask_idx, last_step_idx = self.step_history[tab_idx].pop()
+    
+        # Update current subtask and step
+        self.current_task_indices[tab_idx] = last_subtask_idx
+        self.task_step_indices[(tab_idx, last_subtask_idx)] = last_step_idx
+    
         self.render_functions[tab_idx](tab_idx)
-
+    
+    def highlight_task_complete(self, tab_idx, subtask_idx):
+        # Example: assume each tab has a QListWidget per subtask group
+        tab_widget = self.tabs.widget(tab_idx)
+        list_widget = tab_widget.findChild(QListWidget)  # Adjust as needed
+        if list_widget:
+            item = list_widget.item(subtask_idx)
+            if item:
+                item.setForeground(Qt.green)
+                item.setFont(QFont(item.font().family(), item.font().pointSize(), QFont.Bold))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
