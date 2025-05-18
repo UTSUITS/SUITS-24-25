@@ -155,7 +155,8 @@ class CameraTab(QWidget):
             filename = f"captured_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
             full_path = os.path.join(self.image_dir, filename)
 
-            Image.fromarray(frame).save(full_path)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            Image.fromarray(rgb_frame).save(full_path)
             print(f"Saved: {full_path}")
 
             # Update thumbnail and label
