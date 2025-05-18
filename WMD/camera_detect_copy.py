@@ -91,7 +91,7 @@ class CameraTab(QWidget):
         self.http_thread = None
 
         # Ensure image directory exists
-        self.image_dir = os.path.join(os.getcwd(), "images")
+        self.image_dir = os.path.join(os.getcwd(), "WMD/captures")
         os.makedirs(self.image_dir, exist_ok=True)
 
     def toggle_camera(self):
