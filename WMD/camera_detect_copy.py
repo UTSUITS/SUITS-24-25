@@ -2,9 +2,10 @@ import sys
 import os
 import time
 import threading
+import subprocess
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QSizePolicy,
-    QHBoxLayout, QComboBox
+    QHBoxLayout, QComboBox, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
@@ -22,13 +23,12 @@ class CameraTab(QWidget):
         super().__init__()
         self.layout = QVBoxLayout()
 
-        # Camera feed label
+        # Camera feed
         self.label = QLabel("Camera feed will appear here")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setFixedSize(640, 480)
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        # Thumbnail + filename container
         self.thumbnail = QLabel()
         self.thumbnail.setFixedSize(100, 75)
         self.thumbnail.setStyleSheet("border: 2px solid gray;")
@@ -62,39 +62,60 @@ class CameraTab(QWidget):
 
         for field, options in fields.items():
             label = QLabel(field)
-            label.setStyleSheet("color: white; font-weight: bold; margin-top: 10px;")
             combo = QComboBox()
             combo.addItems(options)
-            combo.setStyleSheet("color: white; background-color: #333333;")  # White font
+            combo.setStyleSheet("color: white;")
             self.notes_fields[field] = combo
             field_notes_layout.addWidget(label)
             field_notes_layout.addWidget(combo)
 
-        # Save Notes button styled
-        self.save_notes_button = QPushButton("Save Notes + Capture Photo")
-        self.save_notes_button.clicked.connect(self.save_notes_and_photo)
+        # Save Notes button (triggers both photo + field note save)
+        self.save_notes_button = QPushButton("Save Field Notes + Capture Photo")
         self.save_notes_button.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
                 color: white;
-                font-weight: bold;
                 font-size: 16px;
-                border-radius: 4px;
+                font-weight: bold;
+                border-radius: 8px;
                 padding: 10px;
             }
             QPushButton:hover {
                 background-color: #218838;
             }
         """)
+        self.save_notes_button.clicked.connect(self.save_notes)
         field_notes_layout.addWidget(self.save_notes_button)
+
+        # Library button
+        self.library_button = QPushButton("📁 Open Library")
+        self.library_button.setStyleSheet("""
+            QPushButton {
+                background-color: #444;
+                color: white;
+                font-size: 14px;
+                border-radius: 5px;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #666;
+            }
+        """)
+        self.library_button.clicked.connect(self.open_library)
+        field_notes_layout.addWidget(self.library_button)
+
+        # Expand notes section fully to the right
+        field_notes_layout.addStretch(1)
+        field_notes_container = QVBoxLayout()
+        field_notes_container.addLayout(field_notes_layout)
 
         camera_notes_layout = QHBoxLayout()
         camera_notes_layout.addLayout(camera_stack)
-        camera_notes_layout.addLayout(field_notes_layout)
+        camera_notes_layout.addLayout(field_notes_container)
 
         self.layout.addLayout(camera_notes_layout)
 
-        # Buttons
+        # Start Camera Button
         self.button = QPushButton("Start Camera")
         self.button.setFixedSize(400, 70)
         self.button.setStyleSheet("""
@@ -111,25 +132,8 @@ class CameraTab(QWidget):
         """)
         self.button.clicked.connect(self.toggle_camera)
 
-        self.capture_button = QPushButton("Capture Photo")
-        self.capture_button.setFixedSize(200, 50)
-        self.capture_button.setStyleSheet("""
-            QPushButton {
-                background-color: #007bff;
-                color: white;
-                border-radius: 5px;
-                font-weight: bold;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background-color: #0056b3;
-            }
-        """)
-        self.capture_button.clicked.connect(self.capture_photo)
-
         bottom_row = QHBoxLayout()
         bottom_row.addWidget(self.button, alignment=Qt.AlignmentFlag.AlignLeft)
-        bottom_row.addWidget(self.capture_button, alignment=Qt.AlignmentFlag.AlignLeft)
         bottom_row.addStretch(1)
 
         self.layout.addStretch(1)
@@ -170,19 +174,17 @@ class CameraTab(QWidget):
     def update_frame(self):
         if shared_picam2:
             frame = shared_picam2.capture_array()
-
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            cv2.putText(
-                frame, timestamp, (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA
-            )
+            cv2.putText(frame, timestamp, (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (255, 255, 255), 2, cv2.LINE_AA)
 
             frame_rgb = frame[..., ::-1]
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
             qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
-            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
             self.label.setPixmap(pix)
 
     def capture_photo(self):
@@ -192,16 +194,51 @@ class CameraTab(QWidget):
             filename = f"captured_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
             full_path = os.path.join(self.image_dir, filename)
             Image.fromarray(frame_rgb).save(full_path)
-            print(f"Saved: {full_path}")
 
-            thumb = QPixmap(full_path).scaled(self.thumbnail.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            thumb = QPixmap(full_path).scaled(self.thumbnail.size(),
+                                              Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
             self.thumbnail.setPixmap(thumb)
             self.thumbnail.setVisible(True)
-
             self.filename_label.setText(filename)
             self.filename_label.setVisible(True)
 
             self.flash_effect()
+            return filename  # return filename to pair with notes
+        return None
+
+    def save_notes(self):
+        photo_filename = self.capture_photo()
+        if not photo_filename:
+            return
+
+        notes_filename = f"field_notes_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+        notes_path = os.path.join(self.image_dir, notes_filename)
+        with open(notes_path, 'w') as f:
+            for field, combo in self.notes_fields.items():
+                f.write(f"{field}: {combo.currentText()}\n")
+            f.write(f"\nAssociated Photo: {photo_filename}\n")
+
+        # Confirmation Popup
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setText("✅ Field notes and photo captured.")
+        msg.setWindowTitle("Capture Successful")
+        msg.setStandardButtons(QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Close)
+
+        if msg.exec() == QMessageBox.StandardButton.Open:
+            self.open_file(notes_path)
+
+    def open_file(self, path):
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.call(["open", path])
+        else:
+            subprocess.call(["xdg-open", path])
+
+    def open_library(self):
+        self.open_file(self.image_dir)
 
     def flash_effect(self):
         pixmap = self.label.pixmap()
@@ -219,22 +256,10 @@ class CameraTab(QWidget):
         self.label.repaint()
         QTimer.singleShot(100, self.update_frame)
 
-    def save_notes_and_photo(self):
-        # Save notes
-        filename = f"field_notes_{time.strftime('%Y%m%d_%H%M%S')}.txt"
-        notes_path = os.path.join(self.image_dir, filename)
-        with open(notes_path, 'w') as f:
-            for field, combo in self.notes_fields.items():
-                f.write(f"{field}: {combo.currentText()}\n")
-        print(f"Saved field notes: {notes_path}")
-
-        # Take a photo
-        self.capture_photo()
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = CameraTab()
-    window.setWindowTitle("Camera Capture with Timestamp and Flash")
+    window.setWindowTitle("NASA SUITS: Camera and Field Notes")
     window.show()
     sys.exit(app.exec())
