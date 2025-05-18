@@ -1,83 +1,59 @@
-import sys
-import cv2
-from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QVBoxLayout
+# camera_detect_copy.py
+
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy
+from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtCore import QTimer
 
-# ==== Distance Estimation Constants ====
-KNOWN_FACE_WIDTH = 14.0  # cm, average adult face width
-FOCAL_LENGTH = 600       # pixels (calibrate for your camera setup)
+from picamera2 import Picamera2
+import numpy as np
 
-def estimate_distance(perceived_width):
-    if perceived_width == 0:
-        return None
-    return (KNOWN_FACE_WIDTH * FOCAL_LENGTH) / perceived_width
-
-class FaceDetectionApp(QWidget):
+class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Face Detection and Distance (Raspberry Pi 4)")
+        self.layout = QVBoxLayout()
 
-        # === UI Layout ===
-        self.image_label = QLabel()
-        layout = QVBoxLayout()
-        layout.addWidget(self.image_label)
-        self.setLayout(layout)
+        self.label = QLabel("Camera feed will appear here")
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setFixedSize(640, 480)
+        self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.layout.addWidget(self.label)
 
-        # === Load face detector ===
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
+        self.button = QPushButton("Start Camera")
+        self.layout.addWidget(self.button)
 
-        # === Open camera ===
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            raise RuntimeError("Could not open camera. Check if it's connected and enabled.")
+        self.setLayout(self.layout)
 
-        # === Timer for frame update ===
+        self.picam2 = None
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
-        self.timer.start(30)  # ~30 FPS
+
+        self.button.clicked.connect(self.toggle_camera)
+        self.camera_running = False
+
+    def toggle_camera(self):
+        if not self.camera_running:
+            self.picam2 = Picamera2()
+            config = self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (1024, 600)})
+            self.picam2.configure(config)
+            self.picam2.start()
+            self.timer.start(60)
+            self.button.setText("Stop Camera")
+        else:
+            self.timer.stop()
+            if self.picam2:
+                self.picam2.stop()
+                self.picam2 = None
+            self.label.setText("Camera stopped")
+            self.button.setText("Start Camera")
+        self.camera_running = not self.camera_running
 
     def update_frame(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            return
-
-        # Resize for speed
-        frame = cv2.resize(frame, (640, 480))
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # Detect faces
-        faces = self.face_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(30, 30)
-        )
-
-        # Draw rectangles and estimate distance
-        for (x, y, w, h) in faces:
-            distance = estimate_distance(w)
-            if distance:
-                label = f"{distance:.1f} cm"
-                cv2.putText(frame, label, (x, y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 255), 2)
-
-        # Convert to Qt image
-        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb_image.shape
-        bytes_per_line = ch * w
-        qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        self.image_label.setPixmap(QPixmap.fromImage(qt_image))
-
-    def closeEvent(self, event):
-        self.cap.release()
-        super().closeEvent(event)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = FaceDetectionApp()
-    window.show()
-    sys.exit(app.exec())
+        if self.picam2:
+            frame = self.picam2.capture_array()
+            frame_rgb = frame[..., ::-1]
+            h, w, ch = frame_rgb.shape
+            bytes_per_line = ch * w
+            qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            pix = QPixmap.fromImage(qt_image)
+            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.label.setPixmap(pix)
