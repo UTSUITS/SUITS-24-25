@@ -1,8 +1,8 @@
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel,
-    QTabWidget, QHBoxLayout, QProgressBar,
-    QPushButton, QSizePolicy, QMessageBox, QListWidget, QListWidgetItem
+    QTabWidget, QHBoxLayout, QProgressBar, QDialog,
+    QPushButton, QSizePolicy, QMessageBox, QListWidget, QListWidgetItem, QCheckBox
 )
 from PyQt6.QtCore import Qt, QDateTime, QTimer
 from PyQt6.QtGui import QColor, QPalette, QFont, QBrush
@@ -100,7 +100,10 @@ class TaskTracker(QWidget):
                     "Perform Sampling Procedures below",
                     "Upon completion of sampling procedures at worksite, announce completion over comms",
                     "Proceed to next location if available and restart Geologic Sampling procedures"
-                    "If sampling is complete at all locations or return is required, announce completion and begin ingress procedures PR, monitor EV locations and scientific data throughout the entire sampling process."                   
+                    "If sampling is complete at all locations or return is required:", 
+                    "  • Announce completion over comms",
+                    "  • Begin ingress procedures per protocol (PR)",
+                    "  • Monitor EV locations and scientific data throughout the entire sampling process"
                 ],
                 "Sampling Procedure": [
                     "EV Open Sampling Procedure",
@@ -144,8 +147,8 @@ class TaskTracker(QWidget):
 
         self.current_task_index = [0] * len(self.task_groups)
         self.task_labels = []
-        self.proc_complete_buttons = []
-        self.undo_buttons = []
+        # self.proc_complete_buttons = []
+        # self.undo_buttons = []
 
         self.current_task_indices = {}  # Track current index for each main tab
 
@@ -177,12 +180,14 @@ class TaskTracker(QWidget):
 
                 # Title
                 title_label = QLabel(current_subtask_name)
-                title_label.setStyleSheet("font-size: 18pt; color: white;")
+                title_label.setStyleSheet("font-size: 20pt; color: white;")
                 task_display_layout.addWidget(title_label)
 
                 # Steps
                 for i, step in enumerate(current_steps):
-                    label = QLabel(f"{i+1}. {step}")
+                    # label = QLabel(f"{i+1}. {step}")
+                    label = QLabel(f"{step}")
+                    label.setWordWrap(True)
                     if i == step_idx:
                         label.setStyleSheet("font-size: 14pt; color: #00FF00; font-weight: bold;")
                     else:
@@ -198,9 +203,10 @@ class TaskTracker(QWidget):
                     QPushButton {
                         background-color: #28a745;
                         color: white;
-                        font-size: 14pt;
+                        font-size: 20pt;
                         padding: 10px 20px;
                         border-radius: 10px;
+                        font-weight: bold;
                     }
                     QPushButton:hover {
                         background-color: #218838;
@@ -209,7 +215,7 @@ class TaskTracker(QWidget):
                         background-color: #1e7e34;
                     }
                 """)
-                complete_button.setMinimumHeight(40)
+                complete_button.setMinimumHeight(60)
                 complete_button.clicked.connect(lambda: self.mark_step_complete(tab_idx))
                 button_layout.addWidget(complete_button)
 
@@ -218,9 +224,10 @@ class TaskTracker(QWidget):
                     QPushButton {
                         background-color: #dc3545;
                         color: white;
-                        font-size: 14pt;
+                        font-size: 20pt;
                         padding: 10px 20px;
                         border-radius: 10px;
+                        font-weight: bold;
                     }
                     QPushButton:hover {
                         background-color: #c82333;
@@ -229,7 +236,7 @@ class TaskTracker(QWidget):
                         background-color: #bd2130;
                     }
                 """)
-                undo_button.setMinimumHeight(40)
+                undo_button.setMinimumHeight(60)
                 undo_button.clicked.connect(lambda: self.undo_last_task(tab_idx))
                 button_layout.addWidget(undo_button)
 
@@ -240,24 +247,24 @@ class TaskTracker(QWidget):
             self.render_functions[tab_idx] = render_task
 
             # Navigation buttons
-            nav_layout = QHBoxLayout()
-            prev_btn = QPushButton("Previous Task")
-            next_btn = QPushButton("Next Task")
+            # nav_layout = QHBoxLayout()
+            # prev_btn = QPushButton("Previous Task")
+            # next_btn = QPushButton("Next Task")
 
-            def make_nav_func(delta, idx):
-                def nav():
-                    self.current_task_indices[idx] += delta
-                    self.current_task_indices[idx] %= len(self.task_groups[list(self.task_groups.keys())[idx]])
-                    self.task_step_indices[(idx, self.current_task_indices[idx])] = 0  # Reset step
-                    self.render_functions[idx](idx)
-                return nav
+            # def make_nav_func(delta, idx):
+            #     def nav():
+            #         self.current_task_indices[idx] += delta
+            #         self.current_task_indices[idx] %= len(self.task_groups[list(self.task_groups.keys())[idx]])
+            #         self.task_step_indices[(idx, self.current_task_indices[idx])] = 0  # Reset step
+            #         self.render_functions[idx](idx)
+            #     return nav
 
-            prev_btn.clicked.connect(make_nav_func(-1, tab_idx))
-            next_btn.clicked.connect(make_nav_func(1, tab_idx))
-            nav_layout.addWidget(prev_btn)
-            nav_layout.addWidget(next_btn)
+            # prev_btn.clicked.connect(make_nav_func(-1, tab_idx))
+            # next_btn.clicked.connect(make_nav_func(1, tab_idx))
+            # nav_layout.addWidget(prev_btn)
+            # nav_layout.addWidget(next_btn)
 
-            tab_layout.addLayout(nav_layout)
+            # tab_layout.addLayout(nav_layout)
             self.render_functions[tab_idx](tab_idx)
             self.tabs.addTab(tab_widget, tab_name)
 
@@ -402,6 +409,19 @@ class TaskTracker(QWidget):
             elif child_layout is not None:
                 self.clear_layout(child_layout)
 
+
+    # def open_sampling_popup(self, tab_idx):
+    #     dialog = SamplingProcedureDialog(self)
+    #     result = dialog.exec()
+
+    #     if result == QMessageBox.DialogCode.Accepted:
+    #         # Advance the step index after dialog is completed
+    #         subtask_idx = self.current_task_indices[tab_idx]
+    #         step_idx = self.task_step_indices.get((tab_idx, subtask_idx), 0)
+    #         self.step_history[tab_idx].append((subtask_idx, step_idx))
+    #         self.task_step_indices[(tab_idx, subtask_idx)] = step_idx + 1
+    #         self.render_functions[tab_idx](tab_idx)
+    
     def mark_step_complete(self, tab_idx):
         task_group = list(self.task_groups.items())[tab_idx][1]
         subtask_idx = self.current_task_indices[tab_idx]
@@ -410,6 +430,21 @@ class TaskTracker(QWidget):
         key = (tab_idx, subtask_idx)
 
         current_step = self.task_step_indices.get(key, 0)
+
+        # ✅ Check if current step is the Sampling Procedure trigger
+        current_task = task_keys[subtask_idx]
+        if (current_task == "Geological Sampling" and
+            "Perform Sampling Procedures below" in steps[current_step]):
+
+            procedure_steps = self.task_groups["Navigation & Sampling"]["Sampling Procedure"]
+
+            def resume_task():
+                self.task_step_indices[key] = current_step + 1
+                self.render_functions[tab_idx](tab_idx)
+
+            popup = SamplingProcedurePopup(procedure_steps, resume_task)
+            popup.exec()
+            return
 
         # ✅ Log current step to step_history
         if tab_idx not in self.step_history:
@@ -432,6 +467,37 @@ class TaskTracker(QWidget):
                 return
 
         self.render_functions[tab_idx](tab_idx)
+    
+    # def mark_step_complete(self, tab_idx):
+    #     task_group = list(self.task_groups.items())[tab_idx][1]
+    #     subtask_idx = self.current_task_indices[tab_idx]
+    #     task_keys = list(task_group.keys())
+    #     steps = task_group[task_keys[subtask_idx]]
+    #     key = (tab_idx, subtask_idx)
+
+    #     current_step = self.task_step_indices.get(key, 0)
+
+    #     # ✅ Log current step to step_history
+    #     if tab_idx not in self.step_history:
+    #         self.step_history[tab_idx] = []
+    #     self.step_history[tab_idx].append((tab_idx, subtask_idx, current_step))
+
+    #     if current_step + 1 < len(steps):
+    #         self.task_step_indices[key] = current_step + 1
+    #     else:
+    #         # ✅ Highlight the completed subtask
+    #         self.highlight_task_complete(tab_idx, subtask_idx)
+
+    #         # Move to next subtask or next tab
+    #         if subtask_idx + 1 < len(task_keys):
+    #             self.current_task_indices[tab_idx] += 1
+    #             self.task_step_indices[(tab_idx, self.current_task_indices[tab_idx])] = 0
+    #         else:
+    #             if tab_idx + 1 < self.tabs.count():
+    #                 self.tabs.setCurrentIndex(tab_idx + 1)
+    #             return
+
+    #     self.render_functions[tab_idx](tab_idx)
 
 
     def undo_last_task(self, tab_idx):
@@ -457,6 +523,87 @@ class TaskTracker(QWidget):
             if item:
                 item.setForeground(Qt.green)
                 item.setFont(QFont(item.font().family(), item.font().pointSize(), QFont.Bold))
+
+class SamplingProcedurePopup(QDialog):
+    # Store checkbox state across instances (class-level cache)
+    checkbox_states = {}
+
+    def __init__(self, procedure_steps, on_complete_callback):
+        super().__init__()
+        self.setWindowTitle("Sampling Procedure") 
+        self.setMinimumSize(900, 500)
+        self.setStyleSheet("""
+            QLabel { color: white; }
+            QWidget { background-color: #2b2b2b; }
+            QCheckBox { color: white; font-size: 20px; }
+            QPushButton {
+                color: white; font-weight: bold; padding: 8px;
+                border-radius: 4px; min-width: 120px; min-height: 40px; 
+                font-size: 24px;
+            }
+            QPushButton#complete {
+                background-color: #28a745;
+            }
+            QPushButton#close {
+                background-color: #dc3545;
+            }
+        """)
+
+        self.on_complete_callback = on_complete_callback
+        self.procedure_steps = procedure_steps
+
+        self.checkboxes = []
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        # Title label
+        title = QLabel("Sampling Procedure Steps:")
+        title_font = QFont("Arial", 20)
+        title_font.setWeight(QFont.Weight.Bold)
+        title.setFont(title_font)
+        layout.addWidget(title)
+
+        # Step checkboxes
+        for i, step in enumerate(self.procedure_steps):
+            checkbox = QCheckBox(step)
+            checkbox.setChecked(self.get_checkbox_state(i))
+            checkbox.stateChanged.connect(lambda state, idx=i: self.save_checkbox_state(idx, state))
+            layout.addWidget(checkbox)
+            self.checkboxes.append(checkbox)
+
+        # Buttons layout
+        button_layout = QHBoxLayout()
+
+        complete_btn = QPushButton("Complete Sampling")
+        complete_btn.setObjectName("complete")
+        complete_btn.clicked.connect(self.complete_procedure)
+
+        close_btn = QPushButton("Close")
+        close_btn.setObjectName("close")
+        close_btn.clicked.connect(self.reject)
+
+        button_layout.addWidget(complete_btn)
+        button_layout.addWidget(close_btn)
+
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+    def get_checkbox_state(self, idx):
+        return self.checkbox_states.get(idx, False)
+
+    def save_checkbox_state(self, idx, state):
+        self.checkbox_states[idx] = (state == Qt.CheckState.Checked)
+
+    def complete_procedure(self):
+        self.on_complete_callback()
+        self.accept()
+        # if all(cb.isChecked() for cb in self.checkboxes):
+        #     self.on_complete_callback()
+        #     self.accept()
+        # else:
+        #     QMessageBox.warning(self, "Incomplete", "Please check off all steps before completing.")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
