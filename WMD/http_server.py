@@ -35,13 +35,18 @@ class CamHandler(BaseHTTPRequestHandler):
                 while True:
                     # frame = picam2.capture_array()
                     frame = picam2.capture_array()
-                    frame_rgb = frame[..., ::-1]
+
+                    # REMOVE this line:
+                    # frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
                     # Instead, just use the frame directly
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    cv2.putText(frame_rgb, timestamp, (10, frame_rgb.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                    _, jpeg = cv2.imencode('.jpg', frame_rgb)
+                    cv2.putText(frame, timestamp, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    _, jpeg = cv2.imencode('.jpg', frame)
 
+                    # timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                    # cv2.putText(frame_bgr, timestamp, (10, frame_bgr.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    # _, jpeg = cv2.imencode('.jpg', frame_bgr)
                     self.wfile.write(b"--jpgboundary\r\n")
                     self.send_header("Content-type", "image/jpeg")
                     self.send_header("Content-length", str(len(jpeg)))
