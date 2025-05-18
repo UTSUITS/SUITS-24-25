@@ -8,12 +8,12 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QComboBox, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
+from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor, QFont
 
 from picamera2 import Picamera2
 from libcamera import controls
 import http_server  # Ensure this module is implemented
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import cv2
 
 shared_picam2 = Picamera2()
@@ -62,9 +62,13 @@ class CameraTab(QWidget):
 
         for field, options in fields.items():
             label = QLabel(field)
+            label.setStyleSheet("color: white;")
             combo = QComboBox()
             combo.addItems(options)
-            combo.setStyleSheet("color: white;")
+            combo.setStyleSheet("color: white; font-size: 16px; padding: 6px;")
+            font = QFont()
+            font.setPointSize(12)
+            combo.setFont(font)
             self.notes_fields[field] = combo
             field_notes_layout.addWidget(label)
             field_notes_layout.addWidget(combo)
@@ -104,7 +108,6 @@ class CameraTab(QWidget):
         self.library_button.clicked.connect(self.open_library)
         field_notes_layout.addWidget(self.library_button)
 
-        # Expand notes section fully to the right
         field_notes_layout.addStretch(1)
         field_notes_container = QVBoxLayout()
         field_notes_container.addLayout(field_notes_layout)
@@ -191,9 +194,20 @@ class CameraTab(QWidget):
         if shared_picam2 and self.camera_running:
             frame = shared_picam2.capture_array()
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            pil_img = Image.fromarray(frame_rgb)
+
+            draw = ImageDraw.Draw(pil_img)
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", 20)
+            except:
+                font = ImageFont.load_default()
+
+            draw.text((10, 10), timestamp, fill="white", font=font)
+
             filename = f"captured_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
             full_path = os.path.join(self.image_dir, filename)
-            Image.fromarray(frame_rgb).save(full_path)
+            pil_img.save(full_path)
 
             thumb = QPixmap(full_path).scaled(self.thumbnail.size(),
                                               Qt.AspectRatioMode.KeepAspectRatio,
@@ -204,7 +218,7 @@ class CameraTab(QWidget):
             self.filename_label.setVisible(True)
 
             self.flash_effect()
-            return filename  # return filename to pair with notes
+            return filename
         return None
 
     def save_notes(self):
@@ -219,7 +233,6 @@ class CameraTab(QWidget):
                 f.write(f"{field}: {combo.currentText()}\n")
             f.write(f"\nAssociated Photo: {photo_filename}\n")
 
-        # Confirmation Popup
         msg = QMessageBox()
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setText("✅ Field notes and photo captured.")
