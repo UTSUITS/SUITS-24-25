@@ -3,8 +3,8 @@ import os
 import time
 import threading
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel,
-    QSizePolicy, QHBoxLayout
+    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QSizePolicy,
+    QHBoxLayout, QStackedLayout, QComboBox, QTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
@@ -17,45 +17,20 @@ import cv2
 
 shared_picam2 = Picamera2()
 
-
 class CameraTab(QWidget):
     def __init__(self):
         super().__init__()
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
+        self.layout = QHBoxLayout()  # Main layout is horizontal
 
-        # Main camera feed
+        # Left: Camera and buttons
+        self.left_layout = QVBoxLayout()
+
         self.label = QLabel("Camera feed will appear here")
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setFixedSize(640, 480)
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.left_layout.addWidget(self.label)
 
-        # Thumbnail preview + filename
-        self.thumbnail = QLabel()
-        self.thumbnail.setFixedSize(100, 75)
-        self.thumbnail.setStyleSheet("border: 2px solid gray;")
-        self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumbnail.setVisible(False)
-
-        self.filename_label = QLabel("")
-        self.filename_label.setStyleSheet("color: gray; font-size: 10pt;")
-        self.filename_label.setVisible(False)
-
-        # Organize thumbnail + filename vertically
-        thumb_layout = QVBoxLayout()
-        thumb_layout.addWidget(self.thumbnail, alignment=Qt.AlignmentFlag.AlignCenter)
-        thumb_layout.addWidget(self.filename_label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        thumb_widget = QWidget()
-        thumb_widget.setLayout(thumb_layout)
-
-        # Layout main feed and thumbnail horizontally
-        top_row = QHBoxLayout()
-        top_row.addWidget(self.label)
-        top_row.addWidget(thumb_widget)
-        self.layout.addLayout(top_row)
-
-        # Buttons
         self.button = QPushButton("Start Camera")
         self.button.setFixedSize(400, 70)
         self.button.setStyleSheet("""
@@ -88,23 +63,77 @@ class CameraTab(QWidget):
         """)
         self.capture_button.clicked.connect(self.capture_photo)
 
-        # Bottom layout for buttons
-        self.layout.addStretch(1)
         bottom_row = QHBoxLayout()
-        bottom_row.addWidget(self.button, alignment=Qt.AlignmentFlag.AlignLeft)
-        bottom_row.addWidget(self.capture_button, alignment=Qt.AlignmentFlag.AlignLeft)
-        bottom_row.addStretch(1)
-        self.layout.addLayout(bottom_row)
+        bottom_row.addWidget(self.button)
+        bottom_row.addWidget(self.capture_button)
+        self.left_layout.addLayout(bottom_row)
 
-        # Timer for video updates
+        # Right: Field notes and thumbnail
+        self.right_layout = QVBoxLayout()
+
+        self.thumbnail = QLabel()
+        self.thumbnail.setFixedSize(100, 75)
+        self.thumbnail.setStyleSheet("border: 2px solid gray;")
+        self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        self.thumbnail.setVisible(False)
+
+        self.thumbnail_label = QLabel()
+        self.thumbnail_label.setStyleSheet("color: gray; font-size: 10px;")
+        self.thumbnail_label.setVisible(False)
+
+        self.right_layout.addWidget(self.thumbnail, alignment=Qt.AlignmentFlag.AlignRight)
+        self.right_layout.addWidget(self.thumbnail_label, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # Field Notes Section
+        self.field_notes_layout = QVBoxLayout()
+        self.field_notes_layout.addWidget(QLabel("Field Notes:"))
+
+        self.size_shape = QComboBox()
+        self.size_shape.addItems(["", "Small chip", "Fist sized", "Potato shaped"])
+        self.field_notes_layout.addWidget(QLabel("Size/Shape"))
+        self.field_notes_layout.addWidget(self.size_shape)
+
+        self.color_tone = QComboBox()
+        self.color_tone.addItems(["", "Grey", "Red", "Black", "Light toned"])
+        self.field_notes_layout.addWidget(QLabel("Color/Tone"))
+        self.field_notes_layout.addWidget(self.color_tone)
+
+        self.texture = QComboBox()
+        self.texture.addItems(["", "Fine", "Medium", "Coarse"])
+        self.field_notes_layout.addWidget(QLabel("Texture (Grain Size)"))
+        self.field_notes_layout.addWidget(self.texture)
+
+        self.durability = QComboBox()
+        self.durability.addItems(["", "Hard to break", "Crumbles"])
+        self.field_notes_layout.addWidget(QLabel("Durability"))
+        self.field_notes_layout.addWidget(self.durability)
+
+        self.density = QComboBox()
+        self.density.addItems(["", "Dense", "Not dense"])
+        self.field_notes_layout.addWidget(QLabel("Density"))
+        self.field_notes_layout.addWidget(self.density)
+
+        self.surface_feature = QComboBox()
+        self.surface_feature.addItems(["", "Weathering ring", "Impacts"])
+        self.field_notes_layout.addWidget(QLabel("Surface Feature"))
+        self.field_notes_layout.addWidget(self.surface_feature)
+
+        self.save_notes_button = QPushButton("Save Field Notes")
+        self.save_notes_button.clicked.connect(self.save_field_notes)
+        self.field_notes_layout.addWidget(self.save_notes_button)
+
+        self.right_layout.addLayout(self.field_notes_layout)
+
+        # Combine layouts
+        self.layout.addLayout(self.left_layout)
+        self.layout.addLayout(self.right_layout)
+        self.setLayout(self.layout)
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
-
         self.camera_running = False
         self.http_thread = None
-
-        # Image save directory
-        self.image_dir = os.path.join(os.getcwd(), "WMD/captures")
+        self.image_dir = os.path.join(os.getcwd(), "images")
         os.makedirs(self.image_dir, exist_ok=True)
 
     def toggle_camera(self):
@@ -132,63 +161,66 @@ class CameraTab(QWidget):
     def update_frame(self):
         if shared_picam2:
             frame = shared_picam2.capture_array()
-
-            # Timestamp overlay
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            cv2.putText(
-                frame, timestamp, (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA
-            )
-
-            # Convert and show
-            frame_rgb = frame[..., ::-1]
+            cv2.putText(frame, timestamp, (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (255, 255, 255), 2, cv2.LINE_AA)
+            frame_rgb = frame[..., ::-1]  # Convert BGR to RGB
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
             qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
             pix = QPixmap.fromImage(qt_image)
-            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pix = pix.scaled(self.label.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
             self.label.setPixmap(pix)
 
     def capture_photo(self):
         if shared_picam2 and self.camera_running:
             frame = shared_picam2.capture_array()
+            corrected_frame = cv2.flip(frame, 1)
+            rgb_frame = cv2.cvtColor(corrected_frame, cv2.COLOR_BGR2RGB)
             filename = f"captured_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
             full_path = os.path.join(self.image_dir, filename)
-
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             Image.fromarray(rgb_frame).save(full_path)
             print(f"Saved: {full_path}")
 
-            # Update thumbnail and label
-            thumb = QPixmap(full_path).scaled(self.thumbnail.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            thumb = QPixmap(full_path).scaled(self.thumbnail.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
             self.thumbnail.setPixmap(thumb)
             self.thumbnail.setVisible(True)
-
-            self.filename_label.setText(filename)
-            self.filename_label.setVisible(True)
-
+            self.thumbnail_label.setText(filename)
+            self.thumbnail_label.setVisible(True)
             self.flash_effect()
 
     def flash_effect(self):
         pixmap = self.label.pixmap()
         if pixmap is None:
             return
-
         flash_pixmap = pixmap.copy()
         painter = QPainter(flash_pixmap)
         painter.setBrush(QColor(255, 255, 255, 180))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRect(0, 0, self.label.width(), self.label.height())
         painter.end()
-
         self.label.setPixmap(flash_pixmap)
         self.label.repaint()
         QTimer.singleShot(100, self.update_frame)
 
+    def save_field_notes(self):
+        notes_path = os.path.join(self.image_dir, f"field_notes_{time.strftime('%Y%m%d')}.txt")
+        with open(notes_path, 'a') as f:
+            f.write(f"--- Observation at {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+            f.write(f"Size/Shape: {self.size_shape.currentText()}\n")
+            f.write(f"Color/Tone: {self.color_tone.currentText()}\n")
+            f.write(f"Texture: {self.texture.currentText()}\n")
+            f.write(f"Durability: {self.durability.currentText()}\n")
+            f.write(f"Density: {self.density.currentText()}\n")
+            f.write(f"Surface Feature: {self.surface_feature.currentText()}\n")
+            f.write("\n")
+        print(f"Field notes saved to {notes_path}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = CameraTab()
-    window.setWindowTitle("Camera Capture with Timestamp and Flash")
+    window.setWindowTitle("Camera Capture with Field Notes")
     window.show()
     sys.exit(app.exec())
