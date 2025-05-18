@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import QSlider
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from camera_detect import CameraTab
+# from camera_detect import CameraTab
+from camera_detect_copy import CameraTab 
 
 import numpy as np
 
@@ -215,12 +216,53 @@ class SystemStatusDisplay(QWidget):
 
         label = QLabel(label_text)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("color: white; font-size: 16px;")
+        label.setStyleSheet("color: white; font-size: 16px; border: none; background: transparent;")
         layout.addWidget(label)
 
-        layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        SWITCH_LABELS = {
+            2: ("LOCAL", "UMB"),
+            3: ("SEC", "PRI"),
+            4: ("B", "A"),
+            5: ("SEC", "PRI"),
+            6: ("CLOSE", "OPEN"),
+            7: ("B", "A"),
+            8: ("LOCAL", "UMB"),
+            9: ("SEC", "PRI"),
+            10: ("B", "A"),
+            11: ("SEC", "PRI"),
+            12: ("CLOSE", "OPEN"),
+            13: ("B", "A")
+        }
+
+        if isinstance(widget, ToggleSwitch):
+            hbox = QHBoxLayout()
+            left_text, right_text = SWITCH_LABELS.get(key, ("Off", "On"))
+
+            # Create side labels
+            left_label = QLabel(left_text)
+            right_label = QLabel(right_text)
+            label_style = """
+                QLabel {
+                    color: white;
+                    font-size: 18px;
+                    border: none;
+                    background: transparent;
+                }
+            """
+            left_label.setStyleSheet(label_style)
+            right_label.setStyleSheet(label_style)
+
+            hbox.addWidget(left_label)
+            hbox.addWidget(widget)
+            hbox.addWidget(right_label)
+            hbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hbox.setSpacing(5)
+            layout.addLayout(hbox)
+        else:
+            layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         return container
+
 
     # Called by timer to refresh telemetry values and update UI
     def refresh_data(self):
@@ -459,48 +501,61 @@ class PieChartWidget(QWidget):
         display_values = [v if v > 0 else 0.001 for v in self.values]
         total = sum(display_values)
 
+        # Sort by value descending, maintaining consistent label order
+        sorted_data = sorted(zip(self.values, self.labels), key=lambda x: x[0], reverse=True)
+        sorted_values = [max(v, 0.001) for v, _ in sorted_data]
+        sorted_labels = [l for _, l in sorted_data]
+
         wedges, _ = self.ax.pie(
-            display_values,
+            sorted_values,
             startangle=90,
             radius=1.0,
             wedgeprops=dict(width=1.0)
         )
 
+
         left_labels = []
         right_labels = []
 
         if show_labels:
-            for i, wedge in enumerate(wedges):
-                angle = (wedge.theta2 + wedge.theta1) / 2
-                theta_rad = np.deg2rad(angle)
-                x = np.cos(theta_rad)
-                y = np.sin(theta_rad)
-                value = self.values[i]
 
-                if value > total * 0.05:
-                    self.ax.text(x * 0.6, y * 0.6, f"{value:.2f}", ha='center', va='center',
-                                 fontsize=10, color='white')
-                else:
-                    label_data = {"value": f"{value:.2f}", "x": x, "y": y}
-                    (right_labels if x >= 0 else left_labels).append(label_data)
+        #     for i, wedge in enumerate(wedges):
+        #         angle = (wedge.theta2 + wedge.theta1) / 2
+        #         theta_rad = np.deg2rad(angle)
+        #         x = np.cos(theta_rad)
+        #         y = np.sin(theta_rad)
+        #         value = self.values[i]
 
-            self.place_side_labels(left_labels, "left")
-            self.place_side_labels(right_labels, "right")
+        #         if value > total * 0.05: 
+        #         #     self.ax.text(x * 0.6, y * 0.6, f"{value:.2f}", ha='center', va='center',
+        #         #                  fontsize=10, color='white')
+        #             continue
+        #         else:
+        #             label_data = {"value": f"{value:.2f}", "x": x, "y": y}
+        #             (right_labels if x >= 0 else left_labels).append(label_data)
 
-        self.ax.legend(
-            wedges,
-            [f"{label} ({self.values[i]:.2f})" for i, label in enumerate(self.labels)],
-            loc='upper center',
-            bbox_to_anchor=(0.5, 1.20),  # moves legend higher
-            ncol=5,
-            labelcolor='white',
-            fontsize=10,
-            frameon=False
-        )
+        #     self.place_side_labels(left_labels, "left")
+        #     self.place_side_labels(right_labels, "right")
+
+            self.ax.legend(
+                wedges,
+                [f"{label} ({self.values[i]:.2f})" for i, label in enumerate(self.labels)],
+                loc='upper center',
+                bbox_to_anchor=(0.5, 1.35),
+                ncol=3,
+                labelcolor='white',
+                fontsize=10,
+                frameon=False,
+                handletextpad=0.4,
+                columnspacing=0.5,
+                borderaxespad=0.2
+            ) 
 
         self.ax.set_title("")
         self.ax.set_facecolor("black")
         self.fig.subplots_adjust(top=0.85)
+        self.fig.tight_layout(rect=[0, 0, 1, 0.98])  # leaves extra vertical room
+        # self.fig.subplots_adjust(top=0.75)
         self.canvas.draw()
 
     # Draws value annotations on left/right sides outside the pie
@@ -594,87 +649,56 @@ class MainWindow(QWidget):
        self.blink_state = True
        self.displays = []
 
-       # Define all tab names and associated telemetry keys
-       tab_definitions = [
-           ("Error Tracking", [(14, "Fan"), (15, "Oxygen"), (16, "Pump")], True),
-           ("Rock Yard Map", [(17, "EVA1 PosX"), (18, "EVA1 PosY"), (19, "EVA1 Heading"), 
-                              (20, "EVA2 PosX"), (21, "EVA2 PosY"), (22, "EVA2 Heading"), 
-                              (23, "LTV PosX"), (24, "LTV PosY"), 
-                              (25,"LTV POI 1 PosX"), (26,"LTV POI 1 PosY"), 
-                              (27,"LTV POI 2 PosX"), (28,"LTV POI 2 PosY"),
-                              (29,"LTV POI 3 PosX"), (30,"LTV POI 3 PosY")]),
-           ("EVA1 SPEC", [(31, "Spec ID"), (32, "SiO2"), (33, "TiO2"), (34, "Al2O3"), (35, "FeO"), (36, "MnO"),
-                          (37, "MgO"), (38, "CaO"), (39, "K2O"), (40, "P2O3"), (41, "Other")]),
-           ("UIA", [(53, "EVA1 Power"), (54, "EVA1 Oxy"), (55, "EVA1 Water Supply"), (56, "EVA1 Water Waste"),
-                    (57, "EVA2 Power"), (58, "EVA2 Oxy"), (59, "EVA2 Water Supply"), (60, "EVA2 Water Waste"),
-                    (61, "Oxy Vent"), (62, "Depress Pump")]) 
-       ]
-
        # Instantiate the TaskTracker widget and add it as a new tab
        self.task_tracker_tab = TaskTracker()
        self.tabs.addTab(self.task_tracker_tab, "EVA Procedures") 
 
+       # DCU TAB 
        dcu_tab = self.create_dcu_tab()
        self.tabs.addTab(dcu_tab, "DCU")
        self.tab_labels.append("DCU")
+       
+       # UIA TAB 
+    #    uia_keys = [(53, "EVA1 Power"), (54, "EVA1 Oxy"), (55, "EVA1 Water Supply"), (56, "EVA1 Water Waste"),
+    #        (57, "EVA2 Power"), (58, "EVA2 Oxy"), (59, "EVA2 Water Supply"), (60, "EVA2 Water Waste"),
+    #        (61, "Oxy Vent"), (62, "Depress Pump")]
+    #    uia_icon = "🛰️"
+    #    uia_name = "UIA"
+    #    uia_use_led = True
+    #    uia_display = SystemStatusDisplay(f"{uia_icon} {uia_name} {uia_icon}", uia_keys, use_leds=uia_use_led, notify_parent=self)
+    #    self.displays.append(uia_display)
+    #    self.tabs.addTab(uia_display, uia_name)
+    #    self.tab_labels.append(uia_name)
+       uia_tab = self.create_uia_tab()
+       self.tabs.addTab(uia_tab, "UIA")
+       self.tab_labels.append("UIA")
 
-       # Loop through all tab definitions and create appropriate tabs
-       for name, keys, *use_leds in tab_definitions:
-           use_led = use_leds[0] if use_leds else False
-
-           # Make EVA1 SPEC and EVA2 SPEC use DonutChart 
-           if name == "EVA1 SPEC":
-               # Only call it once, to avoid duplicate creation
-               spec_tab = self.create_spec_tab()
-               self.tabs.addTab(spec_tab, "SPEC Analysis")
-               self.tab_labels.append("SPEC Analysis")
-               continue
-            
-           if name == "DCU1":
-               dcu_tab = self.create_dcu_tab()
-               self.tabs.addTab(dcu_tab, "DCU")
-               self.tab_labels.append("DCU")
-               continue 
-
-           # Map tab names to emoji icons
-           icon_map = {
-               "EVA1 DCU": "🔋",
-               "EVA2 DCU": "🔋",
-               "Rock Yard Map": "🚙",
-               "EVA1 SPEC": "🧪",
-               "EVA2 SPEC": "🧪",
-               "UIA": "🛰️",
-               "Error Tracking": "⚠️"
-           }
-           icon = icon_map.get(name, "🔧")
-        
-           if name != "Rock Yard Map":  # Check if the tab name is not "Rock Yard Map"
-             # Use generic system status display for remaining tabs
-               display = SystemStatusDisplay(f"{icon} {name} {icon}", keys, use_leds=use_led, notify_parent=self)
-               self.displays.append(display)
-               self.tabs.addTab(display, name)
-               self.tab_labels.append(name)
-
-       # Add custom telemetry tab for EVA1
-       eva_telemetry_tab = self.create_eva_telemetry_tab()
-       self.tabs.addTab(eva_telemetry_tab, "EVA1 TELEMETRY")
-       self.tab_labels.append("EVA1 TELEMETRY")
-
-       # Add custom telemetry tab for EVA2
-       eva2_telemetry_tab = self.create_eva2_telemetry_tab()
-       self.tabs.addTab(eva2_telemetry_tab, "EVA2 TELEMETRY")
-       self.tab_labels.append("EVA2 TELEMETRY")
-
-       # Add EVA state indicator tab
+       # EVA STATES 
        eva_states_tab = self.create_eva_states_tab()
        self.tabs.addTab(eva_states_tab, "EVA States")
        self.tab_labels.append("EVA States")
 
-       # Add map display tab
+       # EVA1 TELEMETRY
+       eva_telemetry_tab = self.create_eva_telemetry_tab()
+       self.tabs.addTab(eva_telemetry_tab, "EVA1 TELEMETRY")
+       self.tab_labels.append("EVA1 TELEMETRY")
+
+       # EVA2 TELEMETRY
+       eva2_telemetry_tab = self.create_eva2_telemetry_tab()
+       self.tabs.addTab(eva2_telemetry_tab, "EVA2 TELEMETRY")
+       self.tab_labels.append("EVA2 TELEMETRY")
+
+       # SPEC TAB
+       spec_tab = self.create_spec_tab()
+       self.tabs.addTab(spec_tab, "SPEC Analysis")
+       self.tab_labels.append("SPEC Analysis") 
+
+       # ROCK YARD MAP 
        rock_yard_map_tab = self.create_rock_yard_map_tab()
        self.tabs.addTab(rock_yard_map_tab, "Rock Yard Map")
        self.tab_labels.append("Rock Yard Map")
 
+       # CAMERA TAB 
        self.camera_tab = CameraTab()
        self.tabs.addTab(self.camera_tab, "Camera")
 
@@ -934,11 +958,11 @@ class MainWindow(QWidget):
         eva1_dcu = SystemStatusDisplay("🔋 EVA1 DCU 🔋", [
             (2, "Battery"), (3, "Oxygen"), (4, "Comm"),
             (5, "Fan"), (6, "Pump"), (7, "CO2")
-        ], buttons_per_row=3)
+        ], buttons_per_row=2)
         eva2_dcu = SystemStatusDisplay("🔋 EVA2 DCU 🔋", [
             (8, "Battery"), (9, "Oxygen"), (10, "Comm"),
             (11, "Fan"), (12, "Pump"), (13, "CO2")
-        ], buttons_per_row=3)
+        ], buttons_per_row=2)
 
         self.displays.extend([eva1_dcu, eva2_dcu])
 
@@ -956,6 +980,66 @@ class MainWindow(QWidget):
         # Add the framed layout to the main container
         layout.addWidget(frame)
         return container
+
+    def create_uia_tab(self):
+        container = QWidget()
+        layout = QVBoxLayout()
+        container.setLayout(layout)
+
+        # Styled main frame with EVA1 and EVA2 side-by-side
+        frame = QFrame()
+        frame.setStyleSheet("""
+            QFrame {
+                border: 2px solid white;
+                border-radius: 10px;
+                background-color: #1a1a1a;
+            }
+        """)
+        frame_layout = QHBoxLayout()
+        frame.setLayout(frame_layout)
+
+        # EVA1 UIA systems
+        eva1_uia = SystemStatusDisplay("🛰️ EVA1 UIA 🛰️", [
+            (53, "Power"), (54, "Oxygen"), (55, "Water Supply"), (56, "Water Waste")
+        ], buttons_per_row=2)
+
+        # EVA2 UIA systems
+        eva2_uia = SystemStatusDisplay("🛰️ EVA2 UIA 🛰️", [
+            (57, "Power"), (58, "Oxygen"), (59, "Water Supply"), (60, "Water Waste")
+        ], buttons_per_row=2)
+
+        self.displays.extend([eva1_uia, eva2_uia])
+
+        # Vertical separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        separator.setStyleSheet("color: white;")
+
+        # Add EVA panels to frame
+        frame_layout.addWidget(eva1_uia)
+        frame_layout.addWidget(separator)
+        frame_layout.addWidget(eva2_uia)
+
+        # Add top panel (EVA1 + EVA2) to layout
+        layout.addWidget(frame)
+
+        # Horizontal separator
+        hline = QFrame()
+        hline.setFrameShape(QFrame.Shape.HLine)
+        hline.setFrameShadow(QFrame.Shadow.Sunken)
+        hline.setStyleSheet("color: white; margin: 10px;")
+        layout.addWidget(hline)
+
+        # Bottom control panel for O2 Vent and Depress Pump
+        bottom_controls = SystemStatusDisplay("Controls", [
+            (61, "Oxy Vent"), (62, "Depress Pump")
+        ], buttons_per_row=2)
+        self.displays.append(bottom_controls)
+        layout.addWidget(bottom_controls)
+
+        return container
+
 
     def create_spec_tab(self):
         container = QWidget()

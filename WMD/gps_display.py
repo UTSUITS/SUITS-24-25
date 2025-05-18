@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
+from Compass.QMC_test import get_bearing  
 
 # Uncomment below to use actual GPSD connection
 # import gps
@@ -41,7 +42,7 @@ class GpsPoller(threading.Thread):
     def run(self):
         while self.running:
             self.gpsd.fix.update()
-            time.sleep(1)
+            time.sleep(0.1)
 
 
 # --- Widgets ---
@@ -192,7 +193,7 @@ class GpsWidget(QWidget):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_display)
-        self.timer.start(1000)
+        self.timer.start(5)
 
         self.breadcrumb_running = False
 
@@ -260,7 +261,7 @@ class GpsWidget(QWidget):
         lat = fix.latitude
         lon = fix.longitude
         speed = fix.speed
-        bearing = fix.track
+        bearing = get_bearing()
 
         self.lat_label.setText(f"Latitude: {lat:.6f}")
         self.lon_label.setText(f"Longitude: {lon:.6f}")
