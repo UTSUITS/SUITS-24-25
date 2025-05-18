@@ -4,7 +4,7 @@ import time
 import threading
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QSizePolicy,
-    QHBoxLayout, QStackedLayout, QComboBox, QTextEdit
+    QHBoxLayout, QComboBox
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
@@ -62,15 +62,30 @@ class CameraTab(QWidget):
 
         for field, options in fields.items():
             label = QLabel(field)
+            label.setStyleSheet("color: white; font-weight: bold; margin-top: 10px;")
             combo = QComboBox()
             combo.addItems(options)
-            combo.setStyleSheet("color: white;")  # Set font color to white
+            combo.setStyleSheet("color: white; background-color: #333333;")  # White font
             self.notes_fields[field] = combo
             field_notes_layout.addWidget(label)
             field_notes_layout.addWidget(combo)
 
-        self.save_notes_button = QPushButton("Save Notes")
-        self.save_notes_button.clicked.connect(self.save_notes)
+        # Save Notes button styled
+        self.save_notes_button = QPushButton("Save Notes + Capture Photo")
+        self.save_notes_button.clicked.connect(self.save_notes_and_photo)
+        self.save_notes_button.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                font-weight: bold;
+                font-size: 16px;
+                border-radius: 4px;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
         field_notes_layout.addWidget(self.save_notes_button)
 
         camera_notes_layout = QHBoxLayout()
@@ -204,13 +219,17 @@ class CameraTab(QWidget):
         self.label.repaint()
         QTimer.singleShot(100, self.update_frame)
 
-    def save_notes(self):
+    def save_notes_and_photo(self):
+        # Save notes
         filename = f"field_notes_{time.strftime('%Y%m%d_%H%M%S')}.txt"
         notes_path = os.path.join(self.image_dir, filename)
         with open(notes_path, 'w') as f:
             for field, combo in self.notes_fields.items():
                 f.write(f"{field}: {combo.currentText()}\n")
         print(f"Saved field notes: {notes_path}")
+
+        # Take a photo
+        self.capture_photo()
 
 
 if __name__ == "__main__":
