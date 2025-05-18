@@ -1,20 +1,20 @@
-# camera_detect_copy.py
-
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy, QHBoxLayout
-from PyQt6.QtCore import QTimer, Qt, QUrl
+import sys
+import os
+import time
+import threading
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QSizePolicy, QHBoxLayout, QStackedLayout
+)
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
-# from PyQt6.QtMultimedia import QSoundEffect
 
 from picamera2 import Picamera2
-import numpy as np
-import threading
-import http_server
-import time
-import os
+from libcamera import controls
+import http_server  # Ensure this module is implemented
+from PIL import Image
+import cv2
 
-# Create shared Picamera2 instance
 shared_picam2 = Picamera2()
-
 
 class CameraTab(QWidget):
     def __init__(self):
@@ -26,6 +26,20 @@ class CameraTab(QWidget):
         self.label.setFixedSize(640, 480)
         self.label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.layout.addWidget(self.label)
+
+        # Thumbnail preview
+        self.thumbnail = QLabel()
+        self.thumbnail.setFixedSize(100, 75)
+        self.thumbnail.setStyleSheet("border: 2px solid gray;")
+        self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        self.thumbnail.setVisible(False)
+
+        # Container for video + thumbnail
+        camera_frame = QWidget()
+        camera_layout = QStackedLayout(camera_frame)
+        camera_layout.addWidget(self.label)
+        camera_layout.addWidget(self.thumbnail)
+        self.layout.addWidget(camera_frame)
 
         # Buttons
         self.button = QPushButton("Start Camera")
@@ -70,17 +84,15 @@ class CameraTab(QWidget):
 
         self.setLayout(self.layout)
 
-        # Timer for updating the video feed
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_frame)
 
         self.camera_running = False
         self.http_thread = None
 
-        # Setup shutter sound
-        # self.shutter_sound = QSoundEffect()
-        # self.shutter_sound.setSource(QUrl.fromLocalFile(os.path.abspath("shutter.mp3")))
-        # self.shutter_sound.setVolume(0.8)
+        # Ensure image directory exists
+        self.image_dir = os.path.join(os.getcwd(), "images")
+        os.makedirs(self.image_dir, exist_ok=True)
 
     def toggle_camera(self):
         if not self.camera_running:
@@ -90,7 +102,6 @@ class CameraTab(QWidget):
             self.timer.start(60)
             self.button.setText("Stop Camera")
 
-            # Start HTTP server
             if not self.http_thread:
                 self.http_thread = threading.Thread(
                     target=http_server.start_http_server,
@@ -108,7 +119,15 @@ class CameraTab(QWidget):
     def update_frame(self):
         if shared_picam2:
             frame = shared_picam2.capture_array()
-            frame_rgb = frame[..., ::-1]  # Convert BGR to RGB
+
+            # Add timestamp overlay
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            cv2.putText(
+                frame, timestamp, (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA
+            )
+
+            frame_rgb = frame[..., ::-1]
             h, w, ch = frame_rgb.shape
             bytes_per_line = ch * w
             qt_image = QImage(frame_rgb.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
@@ -120,27 +139,39 @@ class CameraTab(QWidget):
         if shared_picam2 and self.camera_running:
             frame = shared_picam2.capture_array()
             filename = f"captured_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
-            from PIL import Image
-            Image.fromarray(frame).save(filename)
-            print(f"Saved: {filename}")
+            full_path = os.path.join(self.image_dir, filename)
 
-            # Play sound
-            # self.shutter_sound.play()
+            Image.fromarray(frame).save(full_path)
+            print(f"Saved: {full_path}")
 
-            # Flash effect
+            # Show thumbnail
+            thumb = QPixmap(full_path).scaled(self.thumbnail.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.thumbnail.setPixmap(thumb)
+            self.thumbnail.setVisible(True)
+
+            # Flash white overlay
             self.flash_effect()
 
     def flash_effect(self):
-        # Flash white overlay on label for 100 ms
         pixmap = self.label.pixmap()
         if pixmap is None:
             return
 
-        painter = QPainter(pixmap)
+        flash_pixmap = pixmap.copy()
+        painter = QPainter(flash_pixmap)
         painter.setBrush(QColor(255, 255, 255, 180))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRect(0, 0, self.label.width(), self.label.height())
         painter.end()
-        self.label.setPixmap(pixmap)
+
+        self.label.setPixmap(flash_pixmap)
         self.label.repaint()
-        QTimer.singleShot(100, self.update_frame)  # Reset after flash
+        QTimer.singleShot(100, self.update_frame)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = CameraTab()
+    window.setWindowTitle("Camera Capture with Timestamp and Flash")
+    window.show()
+    sys.exit(app.exec())
