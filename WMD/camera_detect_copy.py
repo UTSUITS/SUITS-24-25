@@ -3,7 +3,7 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QPushButton, QSizePolicy, QHBoxLayout
 from PyQt6.QtCore import QTimer, Qt, QUrl
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
-from PyQt6.QtMultimedia import QSoundEffect
+# from PyQt6.QtMultimedia import QSoundEffect
 
 from picamera2 import Picamera2
 import numpy as np
@@ -78,9 +78,9 @@ class CameraTab(QWidget):
         self.http_thread = None
 
         # Setup shutter sound
-        self.shutter_sound = QSoundEffect()
-        self.shutter_sound.setSource(QUrl.fromLocalFile(os.path.abspath("shutter.mp3")))
-        self.shutter_sound.setVolume(0.8)
+        # self.shutter_sound = QSoundEffect()
+        # self.shutter_sound.setSource(QUrl.fromLocalFile(os.path.abspath("shutter.mp3")))
+        # self.shutter_sound.setVolume(0.8)
 
     def toggle_camera(self):
         if not self.camera_running:
@@ -125,7 +125,7 @@ class CameraTab(QWidget):
             print(f"Saved: {filename}")
 
             # Play sound
-            self.shutter_sound.play()
+            # self.shutter_sound.play()
 
             # Flash effect
             self.flash_effect()
